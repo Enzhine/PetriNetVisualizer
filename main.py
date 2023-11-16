@@ -1,10 +1,21 @@
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QMenuBar, QFileDialog, QStackedWidget, \
-    QGraphicsScene, QGraphicsView, QLabel
+    QGraphicsScene, QGraphicsView, QLabel, QTabWidget
 import pm4py
 import sys
-from utils.PNVUtils import PNVMessageBoxes, PNVDrawer
+import os
+from utils.PNVUtils import PNVMessageBoxes, PNVDrawer, PNVViewer
 
+
+class GraphData:
+    def __init__(self, path: str, exact_pn: tuple["PetriNet", "Marking", "Marking"], viewer: PNVViewer, drawer: PNVDrawer, tab_idx: int):
+        self.path = path
+        self.petri_net = exact_pn[0]
+        self.init_marks = exact_pn[1]
+        self.fin_marks = exact_pn[2]
+        self.viewer = viewer
+        self.drawer = drawer
+        self.tab_idx = tab_idx
 
 class PNVMainWindow(QMainWindow):
     def __init__(self):
@@ -13,6 +24,7 @@ class PNVMainWindow(QMainWindow):
         self.stacked_widget: QStackedWidget = None
         self.graph_view: QGraphicsView = None
         self.graph_scene: QGraphicsScene = None
+        self.tabs: QTabWidget = None
         self.window_icon = QtGui.QIcon('src/PNV_icon.png')
 
         self.setWindowIcon(self.window_icon)
@@ -20,6 +32,8 @@ class PNVMainWindow(QMainWindow):
         self.setMinimumSize(768, 512)
         self.create_menu_bar()
         self.create_stacked_wid()
+
+        self.graphs: list[GraphData] = []
 
         self.file_dialog = QFileDialog(self)
         self.file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
@@ -30,11 +44,10 @@ class PNVMainWindow(QMainWindow):
 
         hello_lbl = QLabel("Petri Net Visualizer - приложение для визуализации сетей Петри")
 
-        self.graph_scene = QGraphicsScene(self)
-        self.graph_view = QGraphicsView(self.graph_scene)
+        self.tabs = QTabWidget(self)
 
         self.stacked_widget.addWidget(hello_lbl)
-        self.stacked_widget.addWidget(self.graph_view)
+        self.stacked_widget.addWidget(self.tabs)
         self.setCentralWidget(self.stacked_widget)
 
     def create_menu_bar(self):
@@ -55,6 +68,10 @@ class PNVMainWindow(QMainWindow):
 
     def load_pnml(self, path: str):
         pn = None
+        for gd in self.graphs:
+            if gd.path == path:
+                self.tabs.setCurrentIndex(gd.tab_idx)
+                return
         try:
             pn, im, fm = pm4py.read_pnml(path)
             if all(len(t) == 0 for t in [pn.places, pn.transitions]):
@@ -70,9 +87,20 @@ class PNVMainWindow(QMainWindow):
                                         inf_text=f"{ex.__class__.__name__}: {ex}",
                                         icon=self.window_icon).exec()
         if pn:
-            self.stacked_widget.setCurrentIndex(1)
-            drawer = PNVDrawer(self.graph_scene, pn)
+            name = os.path.basename(path)
+            gr = QGraphicsScene(self)
+            viewer = PNVViewer(gr)
+            drawer = PNVDrawer(gr, pn)
             drawer.draw_petri_net()
+
+            idx = self.tabs.addTab(viewer, name)
+            gr_data = GraphData(path, (pn, im, fm), viewer, drawer, idx)
+            self.graphs.append(gr_data)
+
+            self.tabs.setTabToolTip(idx, path)
+            if self.stacked_widget.currentIndex() == 0:
+                # first graph to show
+                self.stacked_widget.setCurrentIndex(1)
 
     @QtCore.pyqtSlot()
     def open_pnml(self):
