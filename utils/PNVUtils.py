@@ -29,10 +29,10 @@ class PNVViewer(QGraphicsView):
     def wheelEvent(self, e: typing.Optional[QtGui.QWheelEvent]) -> None:
         vec = e.angleDelta().y() / 120  # Scroll delta
         # scale scene
-        if vec > 0:
+        if vec > 0 and self.scaler < (8 + 2):
             self.scaler += 1
             self.scale(self.inwards, self.inwards)  # closer
-        else:
+        elif self.scaler > (-4 - 2):
             self.scaler -= 1
             self.scale(self.outwards, self.outwards)  # farther
         # scale grid
@@ -80,6 +80,7 @@ class PNVViewer(QGraphicsView):
             painter.drawLine(Qt.QLineF(x, rect.y(), x, rect.y() + rect.height()))
         for y in range(y, y0, self.BG_PX_GRID):
             painter.drawLine(Qt.QLineF(rect.x(), y, rect.x() + rect.width(), y))
+
 
 class PNVDrawer:
     PLACE_RADIUS = 30

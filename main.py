@@ -8,7 +8,8 @@ from utils.PNVUtils import PNVMessageBoxes, PNVDrawer, PNVViewer
 
 
 class GraphData:
-    def __init__(self, path: str, exact_pn: tuple["PetriNet", "Marking", "Marking"], viewer: PNVViewer, drawer: PNVDrawer, tab_idx: int):
+    def __init__(self, path: str, exact_pn: tuple["PetriNet", "Marking", "Marking"], viewer: PNVViewer,
+                 drawer: PNVDrawer, tab_idx: int):
         self.path = path
         self.petri_net = exact_pn[0]
         self.init_marks = exact_pn[1]
@@ -16,6 +17,7 @@ class GraphData:
         self.viewer = viewer
         self.drawer = drawer
         self.tab_idx = tab_idx
+
 
 class PNVMainWindow(QMainWindow):
     def __init__(self):
