@@ -1,10 +1,12 @@
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QMenuBar, QFileDialog, QStackedWidget, \
-    QGraphicsScene, QGraphicsView, QLabel, QTabWidget
+    QGraphicsScene, QGraphicsView, QLabel, QTabWidget, QMessageBox
 import pm4py
 import sys
 import os
 from utils.PNVUtils import PNVMessageBoxes, PNVDrawer, PNVViewer
+
+CURRENT_VERSION = 1.1
 
 
 class GraphData:
@@ -58,8 +60,22 @@ class PNVMainWindow(QMainWindow):
 
         file_menu = QMenu("&Файл", self)
         self.menu_bar.addMenu(file_menu)
+        file_menu.addAction("&Открыть...", self.open_pnml)
 
-        open_file = file_menu.addAction("&Открыть...", self.open_pnml)
+        help_menu = QMenu("&Помощь", self)
+        self.menu_bar.addMenu(help_menu)
+        help_menu.addAction("&О программе", self.open_dev_info)
+
+    @QtCore.pyqtSlot()
+    def open_dev_info(self):
+        wm = QMessageBox()
+        wm.setIcon(QMessageBox.Information)
+
+        wm.setWindowTitle("Информация о программе")
+        wm.setMaximumWidth(128)
+        wm.setText(f"Petri Net Visualizer - приложение для визуализации сетей Петри.\n Фреймворк для отрисовки: PyQt5.\n Библиотека обработки данных: PM4PY.\n\nРазработчик: Шамаев Онар Евгеньевич\nВерсия: {CURRENT_VERSION}")
+        wm.setWindowIcon(self.window_icon)
+        wm.exec()
 
     def get_file_path(self):
         if self.file_dialog.exec():
