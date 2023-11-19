@@ -1,6 +1,7 @@
 # Petri Net Visualizer
 HSE SE 2nd Course Project
 # About program
-Current version: 1.1
+Can view *.pnml files, containing layout information
+Current version: 1.15
 ![image](github_data/preview.png)
 ![image](github_data/preview0.png)

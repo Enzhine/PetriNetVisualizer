@@ -6,7 +6,7 @@ import sys
 import os
 from utils.PNVUtils import PNVMessageBoxes, PNVDrawer, PNVViewer
 
-CURRENT_VERSION = 1.1
+CURRENT_VERSION = 1.15
 
 
 class GraphData:
