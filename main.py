@@ -73,7 +73,7 @@ class PNVMainWindow(QMainWindow):
 
         wm.setWindowTitle("Информация о программе")
         wm.setMaximumWidth(128)
-        wm.setText(f"Petri Net Visualizer - приложение для визуализации сетей Петри.\n Фреймворк для отрисовки: PyQt5.\n Библиотека обработки данных: PM4PY.\n\nРазработчик: Шамаев Онар Евгеньевич\nВерсия: {CURRENT_VERSION}")
+        wm.setText(f"Petri Net Visualizer - приложение для визуализации сетей Петри.\nФреймворк для интерфейса: PyQt5.\nБиблиотека обработки данных: PM4PY.\n\nРазработчик: Шамаев Онар Евгеньевич\nВерсия: {CURRENT_VERSION}")
         wm.setWindowIcon(self.window_icon)
         wm.exec()
 
@@ -109,8 +109,11 @@ class PNVMainWindow(QMainWindow):
             gr = QGraphicsScene(self)
             viewer = PNVViewer(gr)
             drawer = PNVDrawer(gr, pn)
-            drawer.draw_petri_net()
-
+            if not drawer.draw_petri_net():
+                PNVMessageBoxes.warning_msg("Невозможно отобразить Сеть-Петри!",
+                                            f"Извините, но данная версия PetriNetViewer {CURRENT_VERSION} не может отобразить загруженный граф!",
+                                            icon=self.window_icon).exec()
+                return
             idx = self.tabs.addTab(viewer, name)
             gr_data = GraphData(path, (pn, im, fm), viewer, drawer, idx)
             self.graphs.append(gr_data)
