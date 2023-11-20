@@ -3,6 +3,7 @@ import math
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsView, QMessageBox, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QLabel
 from PyQt5 import Qt, QtGui, QtCore
 from pm4py import PetriNet
+from typing import Union
 import numpy as np
 import typing
 
@@ -124,7 +125,7 @@ class PNVDrawer:
         pos, shape = self.layout(t)
         return self.draw_transition_directly(*pos, *shape, t.label)
 
-    def draw_arc(self, from_: PetriNet.Place | PetriNet.Transition, to: PetriNet.Place | PetriNet.Transition) -> QGraphicsLineItem:
+    def draw_arc(self, from_: Union[PetriNet.Place, PetriNet.Transition], to: Union[PetriNet.Place, PetriNet.Transition]) -> QGraphicsLineItem:
         xy0, s0 = self.layout(from_)
         xy1, s1 = self.layout(to)
         vec = (xy1[0] - xy0[0], xy1[1] - xy0[1])
