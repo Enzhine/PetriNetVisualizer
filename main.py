@@ -9,7 +9,7 @@ from pm4py import PetriNet, Marking
 
 from utils.PnvUtils import PNVMessageBoxes, PNVDrawer, PNVViewer
 
-CURRENT_VERSION = 1.15
+CURRENT_VERSION = 1.17
 
 
 class GraphData:
@@ -116,7 +116,7 @@ class PNVMainWindow(QMainWindow):
             PNVMessageBoxes.warning_msg("Возникла ошибка при открытии файла!",
                                         inf_text=f"{ex.__class__.__name__}: {ex}",
                                         icon=self.window_icon).exec()
-        if pn and im and fm:
+        if pn:
             name = os.path.basename(path)
             gr = QGraphicsScene(self)
             viewer = PNVViewer(gr)
