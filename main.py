@@ -4,7 +4,10 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QMenuBar, QFileDia
 import pm4py
 import sys
 import os
-from utils.PNVUtils import PNVMessageBoxes, PNVDrawer, PNVViewer
+from typing import Union
+from pm4py import PetriNet, Marking
+
+from utils.PnvUtils import PNVMessageBoxes, PNVDrawer, PNVViewer
 
 CURRENT_VERSION = 1.15
 
@@ -24,11 +27,13 @@ class GraphData:
 class PNVMainWindow(QMainWindow):
     def __init__(self):
         super(PNVMainWindow, self).__init__()
-        self.menu_bar: QMenuBar = None
-        self.stacked_widget: QStackedWidget = None
-        self.graph_view: QGraphicsView = None
-        self.graph_scene: QGraphicsScene = None
-        self.tabs: QTabWidget = None
+        # to be initiated later
+        self.menu_bar: Union[QMenuBar, None] = None
+        self.stacked_widget: Union[QStackedWidget, None] = None
+        self.graph_view: Union[QGraphicsView, None] = None
+        self.graph_scene: Union[QGraphicsScene, None] = None
+        self.tabs: Union[QTabWidget, None] = None
+        # init
         self.window_icon = QtGui.QIcon('src/PNV_icon.png')
 
         self.setWindowIcon(self.window_icon)
@@ -71,9 +76,16 @@ class PNVMainWindow(QMainWindow):
         wm = QMessageBox()
         wm.setIcon(QMessageBox.Information)
 
+        # text data
         wm.setWindowTitle("Информация о программе")
+        wm.setText(f"Petri Net Visualizer - приложение для визуализации сетей Петри.\n"
+                   f"Фреймворк для интерфейса: PyQt5.\n"
+                   f"Библиотека обработки данных: PM4PY."
+                   f"\n\n"
+                   f"Разработчик: Шамаев Онар Евгеньевич\n"
+                   f"Версия: {CURRENT_VERSION}")
+        # settings
         wm.setMaximumWidth(128)
-        wm.setText(f"Petri Net Visualizer - приложение для визуализации сетей Петри.\nФреймворк для интерфейса: PyQt5.\nБиблиотека обработки данных: PM4PY.\n\nРазработчик: Шамаев Онар Евгеньевич\nВерсия: {CURRENT_VERSION}")
         wm.setWindowIcon(self.window_icon)
         wm.exec()
 
@@ -85,7 +97,7 @@ class PNVMainWindow(QMainWindow):
             return None
 
     def load_pnml(self, path: str):
-        pn = None
+        pn = im = fm = None
         for gd in self.graphs:
             if gd.path == path:
                 self.tabs.setCurrentIndex(gd.tab_idx)
@@ -104,14 +116,15 @@ class PNVMainWindow(QMainWindow):
             PNVMessageBoxes.warning_msg("Возникла ошибка при открытии файла!",
                                         inf_text=f"{ex.__class__.__name__}: {ex}",
                                         icon=self.window_icon).exec()
-        if pn:
+        if pn and im and fm:
             name = os.path.basename(path)
             gr = QGraphicsScene(self)
             viewer = PNVViewer(gr)
             drawer = PNVDrawer(gr, pn)
             if not drawer.draw_petri_net():
                 PNVMessageBoxes.warning_msg("Невозможно отобразить Сеть-Петри!",
-                                            f"Извините, но данная версия PetriNetViewer {CURRENT_VERSION} не может отобразить загруженный граф!",
+                                            f"Извините, но данная версия PetriNetViewer {CURRENT_VERSION}"
+                                            f" не может отобразить загруженный граф!",
                                             icon=self.window_icon).exec()
                 return
             idx = self.tabs.addTab(viewer, name)
