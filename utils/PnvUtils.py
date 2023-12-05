@@ -28,9 +28,12 @@ class PNVViewer(QGraphicsView):
         self.last_lmp: Union[Qt.QPoint, None] = None  # For left mouse press
         self.selection: Union[QGraphicsRectItem, None] = None
         self.selected_items: set[Union[PnvQGRectItem, PnvQGEllipseItem]] = set()
+        self.extra_selected_items: set[Union[PnvQGRectItem, PnvQGEllipseItem]] = set()
         self.scaler = 0
         self.setVerticalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
+        self.horizontalScrollBar().setEnabled(False)
+        self.verticalScrollBar().setEnabled(False)
 
     def scale_factor(self):
         return self.inwards ** self.scaler
@@ -64,12 +67,23 @@ class PNVViewer(QGraphicsView):
             # cursor override logic
             QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.ClosedHandCursor)
         elif e.button() == Qt.Qt.LeftButton and self.last_rmp is None:
+            # try interact
+            clicked = self.scene().itemAt(self.mapToScene(e.pos()), self.viewportTransform())
+            clicked = clicked if isinstance(clicked, PnvQGEllipseItem) or isinstance(clicked, PnvQGRectItem) else None
             # setting hold
             self.last_lmp = self.mapToScene(e.pos())
-            self.selection = self.scene().addRect(Qt.QRectF(self.last_lmp.x(), self.last_lmp.y(), 1, 1),
-                                                  Qt.QPen(Qt.Qt.darkCyan, 1, Qt.Qt.DashLine))
-            # cursor override logic
-            QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.CrossCursor)
+            if clicked:
+                # try to select more
+                self.extra_selected_items = self.selected_items
+                self.selected_items = set()
+                self.selected_add(clicked)
+            else:
+                self.deselect_all()
+                # enable selection if None objects were clicked
+                self.selection = self.scene().addRect(Qt.QRectF(self.last_lmp.x(), self.last_lmp.y(), 1, 1),
+                                                      Qt.QPen(Qt.Qt.darkCyan, 1, Qt.Qt.DashLine))
+                # cursor override logic
+                QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.CrossCursor)
         # firing event at super
         super().mousePressEvent(e)
 
@@ -83,12 +97,22 @@ class PNVViewer(QGraphicsView):
             else:
                 QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.CrossCursor)
         elif e.button() == Qt.Qt.LeftButton:  # LMC release
-            # resetting hold
-            self.last_lmp = None
-            if self.selection is not None:
+            if self.selection is None:
+                cur = self.mapToScene(e.pos())
+                delta = cur - self.last_lmp
+                if math.sqrt(delta.x()*delta.x() + delta.y()*delta.y()) <= 1.5:  # almost click
+                    # reset previous and save new
+                    last = self.selected_items
+                    self.selected_items = self.extra_selected_items
+                    self.deselect_all()
+                    self.selected_items = last
+                    self.extra_selected_items = set()
+            else:
                 self.scene().removeItem(self.selection)
                 self.selection = None
                 self.scene().update()
+            # resetting hold
+            self.last_lmp = None
             # cursor override logic
             if self.last_rmp is None:
                 QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.ArrowCursor)
@@ -101,30 +125,70 @@ class PNVViewer(QGraphicsView):
         if self.last_rmp is not None:  # RMC hold
             delta = self.last_rmp - e.pos()
             self.setSceneRect(
-                self.sceneRect().translated(delta.x() / self.transform().m11(), delta.y() / self.transform().m22()))
+                self.sceneRect().translated(delta.x() / self.transform().m11(), delta.y() / self.transform().m22())
+            )
             self.last_rmp = e.pos()
         if self.last_lmp is not None:  # LMC hold
             cur = self.mapToScene(e.pos())  # current pos
             to = cur - self.last_lmp  # from to
-            self.selection.setRect(Qt.QRectF(min(self.last_lmp.x(), self.last_lmp.x() + to.x()),
-                                             min(self.last_lmp.y(), self.last_lmp.y() + to.y()),
-                                             abs(to.x()),
-                                             abs(to.y())))
-            # find selectable
-            collides: set[Union[PnvQGRectItem, PnvQGEllipseItem]] = \
-                set([o for o in self.selection.collidingItems(Qt.Qt.IntersectsItemBoundingRect)
-                     if isinstance(o, PnvQGRectItem) or isinstance(o, PnvQGEllipseItem)])
-            # differentiate whether selected or not
-            lost = self.selected_items - collides
-            new = collides - self.selected_items
-            # force select
-            for i in lost:
-                i.hover_leave_manually()
-            for i in new:
-                i.hover_enter_manually()
-            # update selected
-            self.selected_items = collides
+            if self.selection:
+                # if mouse moving while selecting
+                self.selection.setRect(Qt.QRectF(min(self.last_lmp.x(), self.last_lmp.x() + to.x()),
+                                                 min(self.last_lmp.y(), self.last_lmp.y() + to.y()),
+                                                 abs(to.x()),
+                                                 abs(to.y())))
+                # find selectable
+                collides: set[Union[PnvQGRectItem, PnvQGEllipseItem]] = \
+                    set([o for o in self.selection.collidingItems(Qt.Qt.IntersectsItemBoundingRect)
+                         if isinstance(o, PnvQGRectItem) or isinstance(o, PnvQGEllipseItem)])
+                # differentiate whether selected or not
+                lost = self.selected_items - collides
+                new = collides - self.selected_items
+                # force select
+                for i in lost:
+                    self.deselect(i)
+                for i in new:
+                    self.selected_add(i)
+                # update selected
+                self.selected_items = collides
+            else:
+                # to this moment all possible selection moves to extra
+                if len(self.selected_items) != 1:
+                    print(f'MULTIPLE OBJECTS MOVE: {len(self.selected_items)}')
+                    raise Exception('MULTIPLE OBJECTS MOVE')
+                last, *_ = self.selected_items  # clicked object
+                if last in self.extra_selected_items:
+                    # move all selected
+                    for i in self.extra_selected_items:
+                        i.setRect(
+                            i.rect().translated(to.x() / i.transform().m11(), to.y() / i.transform().m22())
+                        )
+                else:
+                    # deselect other pre-selected
+                    if len(self.extra_selected_items) != 0:
+                        self.selected_items = self.extra_selected_items
+                        self.deselect_all()
+                        self.selected_items = {last}
+                        self.extra_selected_items = set()
+                    # move one
+                    last.setRect(
+                        last.rect().translated(to.x() / last.transform().m11(), to.y() / last.transform().m22())
+                    )
+                self.last_lmp = cur
         super().mouseMoveEvent(e)
+
+    def selected_add(self, obj: Union[PnvQGRectItem, PnvQGEllipseItem]) -> None:
+        self.selected_items.add(obj)
+        obj.select_manually()
+
+    def deselect(self, obj: Union[PnvQGRectItem, PnvQGEllipseItem]) -> None:
+        self.selected_items.remove(obj)
+        obj.deselect_manually()
+
+    def deselect_all(self) -> None:
+        for i in self.selected_items:
+            i.deselect_manually()
+        self.selected_items.clear()
 
     # def drawForeground(self, painter: typing.Optional[QtGui.QPainter], rect: QtCore.QRectF) -> None:
     #     painter.drawText(Qt.QPointF(rect.x() + rect.width()/2,rect.y() + rect.height()/2), 'wasd')
@@ -158,8 +222,8 @@ class PNVDrawer:
         obj.setPen(Qt.QPen(Qt.Qt.black, PNVDrawer.PLACE_WIDTH))
         obj.setBrush(Qt.QBrush(Qt.Qt.white))
 
-        # obj.set_hovered_pen(Qt.QPen(Qt.Qt.red, PNVDrawer.PLACE_WIDTH)) # style issue
         obj.set_hovered_brush(Qt.QBrush(Qt.Qt.lightGray))
+        obj.set_selected_brush(Qt.QBrush(Qt.QColor(0xafadff)))
 
         self.scene.addItem(obj)
         return obj
@@ -170,8 +234,8 @@ class PNVDrawer:
         obj.setPen(Qt.QPen(Qt.Qt.black, PNVDrawer.PLACE_WIDTH))
         obj.setBrush(Qt.QBrush(Qt.Qt.white))
 
-        # obj.set_hovered_pen(Qt.QPen(Qt.Qt.red, PNVDrawer.PLACE_WIDTH)) # style issue
         obj.set_hovered_brush(Qt.QBrush(Qt.Qt.lightGray))
+        obj.set_selected_brush(Qt.QBrush(Qt.QColor(0xafafff)))
 
         self.scene.addItem(obj)
         if label:
@@ -207,7 +271,7 @@ class PNVDrawer:
 
     def draw_arc(self, from_: Union[PetriNet.Place, PetriNet.Transition],
                  to: Union[PetriNet.Place, PetriNet.Transition]) -> Union[QGraphicsLineItem, None]:
-        """Might return None if it refers to itself"""
+        """Might return None if arc distance zero"""
         xy0, s0 = self.layout(from_)
         xy1, s1 = self.layout(to)
         vec = (xy1[0] - xy0[0], xy1[1] - xy0[1])

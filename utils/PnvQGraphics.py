@@ -9,10 +9,15 @@ class PnvQGEllipseItem(QGraphicsEllipseItem):
 
     def __init__(self, *args, **kwargs):
         super(QGraphicsEllipseItem, self).__init__(*args, *kwargs)  # Universal constructor bypass
+        self.setAcceptHoverEvents(True)
+        # hovered props
         self.pnv_hover_pen: typing.Union[QtGui.QPen, None] = None
         self.pnv_hover_brush: typing.Union[QtGui.QBrush, None] = None
         self.pnv_is_hovered: bool = False
-        self.setAcceptHoverEvents(True)
+        # selected props
+        self.pnv_selected_pen: typing.Union[QtGui.QPen, None] = None
+        self.pnv_selected_brush: typing.Union[QtGui.QBrush, None] = None
+        self.pnv_is_selected: bool = False
 
     def set_hovered_pen(self, pen: Qt.QPen):
         self.pnv_hover_pen = pen
@@ -20,15 +25,33 @@ class PnvQGEllipseItem(QGraphicsEllipseItem):
     def set_hovered_brush(self, br: Qt.QBrush):
         self.pnv_hover_brush = br
 
+    def set_selected_pen(self, pen: Qt.QPen):
+        self.pnv_selected_pen = pen
+
+    def set_selected_brush(self, br: Qt.QBrush):
+        self.pnv_selected_brush = br
+
     def pen(self) -> QtGui.QPen:
-        if self.pnv_is_hovered and self.pnv_hover_pen is not None:
+        if self.pnv_is_selected and self.pnv_selected_pen is not None:
+            return self.pnv_selected_pen
+        elif self.pnv_is_hovered and self.pnv_hover_pen is not None:
             return self.pnv_hover_pen
         return super().pen()
 
     def brush(self) -> QtGui.QBrush:
-        if self.pnv_is_hovered and self.pnv_hover_brush is not None:
+        if self.pnv_is_selected and self.pnv_selected_brush is not None:
+            return self.pnv_selected_brush
+        elif self.pnv_is_hovered and self.pnv_hover_brush is not None:
             return self.pnv_hover_brush
         return super().brush()
+
+    def select_manually(self):
+        self.pnv_is_selected = True
+        self.update()
+
+    def deselect_manually(self):
+        self.pnv_is_selected = False
+        self.update()
 
     def hover_leave_manually(self):
         self.pnv_is_hovered = False
@@ -65,10 +88,15 @@ class PnvQGRectItem(QGraphicsRectItem):
 
     def __init__(self, *args, **kwargs):
         super(QGraphicsRectItem, self).__init__(*args, *kwargs)  # Universal constructor bypass
+        self.setAcceptHoverEvents(True)
+        # hovered props
         self.pnv_hover_pen: typing.Union[QtGui.QPen, None] = None
         self.pnv_hover_brush: typing.Union[QtGui.QBrush, None] = None
-        self.pnv_is_hovered = False
-        self.setAcceptHoverEvents(True)
+        self.pnv_is_hovered: bool = False
+        # selected props
+        self.pnv_selected_pen: typing.Union[QtGui.QPen, None] = None
+        self.pnv_selected_brush: typing.Union[QtGui.QBrush, None] = None
+        self.pnv_is_selected: bool = False
 
     def set_hovered_pen(self, pen: Qt.QPen):
         self.pnv_hover_pen = pen
@@ -76,15 +104,33 @@ class PnvQGRectItem(QGraphicsRectItem):
     def set_hovered_brush(self, br: Qt.QBrush):
         self.pnv_hover_brush = br
 
+    def set_selected_pen(self, pen: Qt.QPen):
+        self.pnv_selected_pen = pen
+
+    def set_selected_brush(self, br: Qt.QBrush):
+        self.pnv_selected_brush = br
+
     def pen(self) -> QtGui.QPen:
-        if self.pnv_is_hovered and self.pnv_hover_pen is not None:
+        if self.pnv_is_selected and self.pnv_selected_pen is not None:
+            return self.pnv_selected_pen
+        elif self.pnv_is_hovered and self.pnv_hover_pen is not None:
             return self.pnv_hover_pen
         return super().pen()
 
     def brush(self) -> QtGui.QBrush:
-        if self.pnv_is_hovered and self.pnv_hover_brush is not None:
+        if self.pnv_is_selected and self.pnv_selected_brush is not None:
+            return self.pnv_selected_brush
+        elif self.pnv_is_hovered and self.pnv_hover_brush is not None:
             return self.pnv_hover_brush
         return super().brush()
+
+    def select_manually(self):
+        self.pnv_is_selected = True
+        self.update()
+
+    def deselect_manually(self):
+        self.pnv_is_selected = False
+        self.update()
 
     def hover_leave_manually(self):
         self.pnv_is_hovered = False
