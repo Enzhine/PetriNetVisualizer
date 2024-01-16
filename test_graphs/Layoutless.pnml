@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pnml>
+  <net type="http://www.informatik.hu-berlin.de/top/pntd/ptNetb" id="noID">
+    <place id="p1">
+      <initialMarking>
+        <text>1</text>
+      </initialMarking>
+    </place>
+    <transition id="t1">
+    </transition>
+    <arc id="a1" source="p1" target="t1">
+    </arc>
+  </net>
+</pnml>

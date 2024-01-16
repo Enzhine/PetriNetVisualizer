@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pnml>
+  <net type="http://www.informatik.hu-berlin.de/top/pntd/ptNetb" id="noID">
+    <place id="p1">
+      <name>
+        <text>arrived</text>
+        <graphics>
+          <offset x="50" y="440"/>
+        </graphics>
+      </name>
+      <graphics>
+        <position x="50" y="400"/>
+        <dimension x="40" y="40"/>
+      </graphics>
+      <initialMarking>
+        <text>1</text>
+      </initialMarking>
+    </place>
+    <transition id="t1">
+      <name>
+        <text>serve coffee</text>
+        <graphics>
+          <offset x="560" y="540"/>
+        </graphics>
+      </name>
+      <graphics>
+        <position x="565" y="500"/>
+        <dimension x="40" y="40"/>
+      </graphics>
+    </transition>
+    <arc id="a1" source="p1" target="t1">
+      <inscription>
+        <text>1</text>
+        <graphics>
+          <offset x="500.0" y="-12.0"/>
+        </graphics>
+      </inscription>
+      <graphics/>
+    </arc>
+  </net>
+</pnml>
