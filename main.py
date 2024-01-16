@@ -12,7 +12,7 @@ from pm4py import PetriNet, Marking
 from pnv.render import PnvViewer, PnvDrawer
 from pnv.utils import PnvMessageBoxes
 
-CURRENT_VERSION = 1.17
+CURRENT_VERSION = 1.18
 
 
 class GraphData:
@@ -27,11 +27,15 @@ class GraphData:
         self.tab_idx: int = tab_idx
 
 
-class PNVMainWindow(QMainWindow):
+class PnvMainWindow(QMainWindow):
     WINDOW_ICON = None
+    RENDER_CANCELLED = "RENDER CANCELLED"
+
+    WINDOW_MIN_WIDTH = 768
+    WINDOW_MIN_HEIGHT = 512
 
     def __init__(self):
-        super(PNVMainWindow, self).__init__()
+        super(QMainWindow, self).__init__()
         # to be initiated later
         self.menu_bar: Union[QMenuBar, None] = None
         self.stacked_widget: Union[QStackedWidget, None] = None
@@ -39,11 +43,11 @@ class PNVMainWindow(QMainWindow):
         self.graph_scene: Union[QGraphicsScene, None] = None
         self.tabs: Union[QTabWidget, None] = None
         # init
-        PNVMainWindow.WINDOW_ICON = QtGui.QIcon('resources/pnv_icon.png')
+        PnvMainWindow.WINDOW_ICON = QtGui.QIcon('resources/pnv_icon.png')
 
-        self.setWindowIcon(PNVMainWindow.WINDOW_ICON)
+        self.setWindowIcon(PnvMainWindow.WINDOW_ICON)
         self.setWindowTitle("Petri Net Visualizer")
-        self.setMinimumSize(768, 512)
+        self.setMinimumSize(PnvMainWindow.WINDOW_MIN_WIDTH, PnvMainWindow.WINDOW_MIN_HEIGHT)
         self.create_menu_bar()
         self.create_stacked_wid()
 
@@ -89,12 +93,13 @@ class PNVMainWindow(QMainWindow):
         wm.setText(f"Petri Net Visualizer - приложение для визуализации сетей Петри.\n"
                    f"Фреймворк для интерфейса: PyQt5.\n"
                    f"Библиотека обработки данных: PM4PY."
+                   f"Библиотека генерации разметки: igraph."
                    f"\n\n"
                    f"Разработчик: Шамаев Онар Евгеньевич\n"
                    f"Версия: {CURRENT_VERSION}")
         # settings
         wm.setMaximumWidth(128)
-        wm.setWindowIcon(PNVMainWindow.WINDOW_ICON)
+        wm.setWindowIcon(PnvMainWindow.WINDOW_ICON)
         wm.exec()
 
     def close_tab(self, idx: int):
@@ -140,12 +145,16 @@ class PNVMainWindow(QMainWindow):
             drawer = PnvDrawer(gr, pn)
             try:
                 drawer.draw_petri_net()
+            except TypeError as te:
+                if len(te.args) == 1 and te.args[0] == PnvMainWindow.RENDER_CANCELLED:
+                    return
+                raise
             except Exception as ex:
                 PnvMessageBoxes.warning_msg("Невозможно отобразить Сеть-Петри!",
                                             f"Извините, но данная версия PetriNetViewer {CURRENT_VERSION}. "
                                             f"не может отобразить загруженный граф! "
                                             f"Сообщение компонента-отрисовки {ex.__class__.__name__}: {ex}",
-                                            icon=PNVMainWindow.WINDOW_ICON).exec()
+                                            icon=PnvMainWindow.WINDOW_ICON).exec()
                 traceback.print_exc()
                 return
             idx = self.tabs.addTab(viewer, name)
@@ -167,7 +176,7 @@ class PNVMainWindow(QMainWindow):
 
 def application():
     app = QApplication(sys.argv)
-    main_window = PNVMainWindow()
+    main_window = PnvMainWindow()
 
     main_window.show()
     sys.exit(app.exec_())

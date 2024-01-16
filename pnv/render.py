@@ -1,15 +1,20 @@
-from typing import Union, Optional
+from typing import Union, Optional, Tuple
 
 from PyQt5 import Qt, QtCore, QtGui
-from PyQt5.QtWidgets import QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsView, QApplication
+from PyQt5.QtWidgets import QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsView, QApplication, \
+    QMessageBox
 from pm4py import PetriNet
+from igraph import Graph
 
 from pnv.graphics import PnvQGTransitionItem, PnvQGPlaceItem, PnvQGArrowItem
 from pnv.utils import PnvMessageBoxes
 
+Layout = Tuple[Tuple[int, int], Tuple[int, int]]
+
 
 class PnvDrawer:
-    PLACE_WIDTH = 3
+    PLACE_PEN_WIDTH = 3
+    GRAPHICS_WIDTH = 40
 
     def __init__(self, scene: QGraphicsScene, net: PetriNet):
         self.scene = scene
@@ -19,7 +24,7 @@ class PnvDrawer:
     def draw_place_directly(self, x: int, y: int, r: int) -> PnvQGPlaceItem:
         # custom ellipse init
         obj = PnvQGPlaceItem(Qt.QRectF(x - r / 2, y - r / 2, r, r))
-        obj.setPen(Qt.QPen(Qt.Qt.black, PnvDrawer.PLACE_WIDTH))
+        obj.setPen(Qt.QPen(Qt.Qt.black, PnvDrawer.PLACE_PEN_WIDTH))
         obj.setBrush(Qt.QBrush(Qt.Qt.white))
 
         obj.set_hovered_brush(Qt.QBrush(Qt.Qt.lightGray))
@@ -31,7 +36,7 @@ class PnvDrawer:
     def draw_transition_directly(self, x: int, y: int, w: int, h: int, label: str = None) -> PnvQGTransitionItem:
         # custom rectangle init
         obj = PnvQGTransitionItem(Qt.QRectF(x - w / 2, y - h / 2, w, h))
-        obj.setPen(Qt.QPen(Qt.Qt.black, PnvDrawer.PLACE_WIDTH))
+        obj.setPen(Qt.QPen(Qt.Qt.black, PnvDrawer.PLACE_PEN_WIDTH))
         obj.setBrush(Qt.QBrush(Qt.Qt.white))
 
         obj.set_hovered_brush(Qt.QBrush(Qt.Qt.lightGray))
@@ -59,7 +64,7 @@ class PnvDrawer:
     def draw_arc(self, from_: Union[PetriNet.Place, PetriNet.Transition],
                  to: Union[PetriNet.Place, PetriNet.Transition]) -> PnvQGArrowItem:
         obj = PnvQGArrowItem(self.mapper[from_], self.mapper[to])
-        obj.setPen(Qt.QPen(Qt.Qt.black, PnvDrawer.PLACE_WIDTH))
+        obj.setPen(Qt.QPen(Qt.Qt.black, PnvDrawer.PLACE_PEN_WIDTH))
         self.scene.addItem(obj)
         return obj
 
@@ -69,24 +74,64 @@ class PnvDrawer:
                and isinstance(obj.properties['layout_information_petri'], tuple)
 
     @staticmethod
-    def layout(obj):
+    def inject_layout(obj, layout: Layout):
+        if PnvDrawer.has_layout(obj):
+            raise ValueError("Layout injection can not be applied to object containing layout!")
+        if not hasattr(obj, 'properties'):
+            setattr(obj, 'properties', dict())
+        if not ('layout_information_petri' in obj.properties):
+            obj.properties['layout_information_petri'] = layout
+
+    @staticmethod
+    def layout(obj) -> Layout:
         return obj.properties['layout_information_petri']
 
     def draw_petri_net(self):
-        if all(self.has_layout(obj) for obj in [*self.net.places, *self.net.transitions]):
-            # layout
-            for p in self.net.places:
-                self.mapper[p] = self.draw_place(p)
-            for t in self.net.transitions:
-                self.mapper[t] = self.draw_transition(t)
-            for a in self.net.arcs:
-                obj = self.draw_arc(a.source, a.target)
-                self.mapper[a.source].arrows.add(obj)
-                self.mapper[a.target].arrows.add(obj)
-            return
-        PnvMessageBoxes.accept_msg("asda", "asda").exec()
-        # no layout
-        raise TypeError("")
+        if not all(self.has_layout(obj) for obj in [*self.net.places, *self.net.transitions]):
+            from main import PnvMainWindow
+            if PnvMessageBoxes.accept_msg(f"Загруженная сеть не имеет предопределённую разметку.",
+                                          f"Сгенерировать разметку сети?",
+                                          icon=PnvMainWindow.WINDOW_ICON).exec() == QMessageBox.No:
+                raise TypeError(PnvMainWindow.RENDER_CANCELLED)
+            else:
+                self.igraph_gen_layout()
+        for p in self.net.places:
+            self.mapper[p] = self.draw_place(p)
+        for t in self.net.transitions:
+            self.mapper[t] = self.draw_transition(t)
+        for a in self.net.arcs:
+            obj = self.draw_arc(a.source, a.target)
+            self.mapper[a.source].arrows.add(obj)
+            self.mapper[a.target].arrows.add(obj)
+
+    def igraph_gen_layout(self):
+        n_vertices = len(self.net.places) + len(self.net.transitions)
+        local_mapper: dict[Union[PetriNet.Place, PetriNet.Transition], int] = dict()
+        local_mapper_re: dict[int, Union[PetriNet.Place, PetriNet.Transition]] = dict()  # just complexity optimization
+        c = 0
+        for obj in self.net.places:
+            local_mapper[obj] = c
+            local_mapper_re[c] = obj
+            c += 1
+        for obj in self.net.transitions:
+            local_mapper[obj] = c
+            local_mapper_re[c] = obj
+            c += 1
+        edges = [(local_mapper[a.source], local_mapper[a.target]) for a in self.net.arcs]
+        g = Graph(n_vertices, edges)
+        layout = g.layout(layout='auto')
+        b = layout.boundaries()
+        dx = b[1][0] - b[0][0]
+        dy = b[1][1] - b[0][1]
+        from main import PnvMainWindow
+        if dx > dy:
+            k = PnvMainWindow.WINDOW_MIN_WIDTH / dx
+        else:
+            k = PnvMainWindow.WINDOW_MIN_HEIGHT / dy
+        layout.scale(k)
+        for i, gen in enumerate(layout):
+            lay = ((gen[0], gen[1]), (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
+            PnvDrawer.inject_layout(local_mapper_re[i], lay)
 
 
 def mod(num: int, other: int):

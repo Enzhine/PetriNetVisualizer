@@ -17,13 +17,15 @@ class PnvMessageBoxes:
         return wm
 
     @staticmethod
-    def accept_msg(text: str, inf_text: str = None, title: str = "Внимание!", icon=None):
+    def accept_msg(text: str, inf_text: str = None, title: str = "Требуется подтверждение!", icon=None):
         wm = QMessageBox()
         wm.setIcon(QMessageBox.Question)
 
         wm.setWindowTitle(title)
         wm.setText(text)
-        wm.setStandardButtons(QMessageBox.Cancel)
+        wm.setStandardButtons(QMessageBox.Yes)
+        wm.addButton(QMessageBox.No)
+        wm.setDefaultButton(QMessageBox.Yes)
         if icon:
             wm.setWindowIcon(icon)
         if inf_text:
