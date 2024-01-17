@@ -10,9 +10,10 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QMenuBar, QFileDia
 from pm4py import PetriNet, Marking
 
 from pnv.render import PnvViewer, PnvDrawer
-from pnv.utils import PnvMessageBoxes
+from pnv.utils import PnvMessageBoxes, PnvConfig
 
 CURRENT_VERSION = 1.18
+APP_NAME = "Petri Net Visualizer"
 
 
 class GraphData:
@@ -34,6 +35,8 @@ class PnvMainWindow(QMainWindow):
     WINDOW_MIN_WIDTH = 768
     WINDOW_MIN_HEIGHT = 512
 
+    CONFIG = None
+
     def __init__(self):
         super(QMainWindow, self).__init__()
         # to be initiated later
@@ -42,11 +45,26 @@ class PnvMainWindow(QMainWindow):
         self.graph_view: Union[QGraphicsView, None] = None
         self.graph_scene: Union[QGraphicsScene, None] = None
         self.tabs: Union[QTabWidget, None] = None
-        # init
+        # static
         PnvMainWindow.WINDOW_ICON = QtGui.QIcon('resources/pnv_icon.png')
-
+        # config
+        try:
+            PnvMainWindow.CONFIG = PnvConfig(APP_NAME)
+        except Exception as ex:
+            PnvMessageBoxes.warning_msg(f'Ошибка загрузки конфигурации программы!',
+                                        f'Возможно конфигурационный файл повреждён. '
+                                        f'Установлены значения по умолчанию. '
+                                        f'Сообщение об ошибке {ex.__class__.__name__}: {ex}',
+                                        icon=PnvMainWindow.WINDOW_ICON).exec()
+        else:
+            if not PnvMainWindow.CONFIG.status:
+                PnvMessageBoxes.warning_msg(f'Ошибка загрузки конфигурации программы!',
+                                            f'Часть данных конфигурационного файла содержит неверный тип данных! '
+                                            f'Ошибочные значения установлены по умолчанию.',
+                                            icon=PnvMainWindow.WINDOW_ICON).exec()
+        # init
         self.setWindowIcon(PnvMainWindow.WINDOW_ICON)
-        self.setWindowTitle("Petri Net Visualizer")
+        self.setWindowTitle(APP_NAME)
         self.setMinimumSize(PnvMainWindow.WINDOW_MIN_WIDTH, PnvMainWindow.WINDOW_MIN_HEIGHT)
         self.create_menu_bar()
         self.create_stacked_wid()
@@ -103,12 +121,35 @@ class PnvMainWindow(QMainWindow):
         wm.exec()
 
     def close_tab(self, idx: int):
+        if not PnvMessageBoxes.is_accepted(
+                PnvMessageBoxes.question_msg(f"Вы собираетесь закрыть вкладку.",
+                                             f"Вы уверены?",
+                                             icon=PnvMainWindow.WINDOW_ICON).exec()):
+            return
         g, *_ = [g for g in self.graphs if g.tab_idx == idx]
+        g: GraphData
+        changes = []
+        if g.viewer.edited_status:
+            changes.append('перемещены элементы сети')
+        if g.drawer.edited_status:
+            changes.append('сгенерирована разметка')
+        if len(changes) != 0 and PnvMessageBoxes.is_accepted(
+                PnvMessageBoxes.accept_msg(f"В загруженную сеть были внесены изменения!",
+                                           f"Изменения: {','.join(changes)}. "
+                                           f"Сохранить изменённую версию, перезаписав файл?",
+                                           icon=PnvMainWindow.WINDOW_ICON).exec()):
+            # apply changes
+            if g.viewer.edited_status:
+                g.viewer.inject_all_positions()
+            pm4py.write_pnml(g.petri_net, g.init_marks, g.fin_marks, g.path)
         self.tabs.removeTab(idx)
         self.graphs.remove(g)
+        for g in self.graphs:
+            if g.tab_idx > idx:
+                # kinda sloppy way
+                g.tab_idx = g.tab_idx - 1
         if self.tabs.count() == 0:
             self.stacked_widget.setCurrentIndex(0)
-        # TODO: various close logic
 
     def get_file_path(self):
         if self.file_dialog.exec():
@@ -177,6 +218,8 @@ class PnvMainWindow(QMainWindow):
 def application():
     app = QApplication(sys.argv)
     main_window = PnvMainWindow()
+    app.setApplicationName(APP_NAME)
+    app.setApplicationVersion(f'{CURRENT_VERSION}')
 
     main_window.show()
     sys.exit(app.exec_())

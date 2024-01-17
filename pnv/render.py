@@ -1,8 +1,7 @@
 from typing import Union, Optional, Tuple
 
 from PyQt5 import Qt, QtCore, QtGui
-from PyQt5.QtWidgets import QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsView, QApplication, \
-    QMessageBox
+from PyQt5.QtWidgets import QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsView, QApplication
 from pm4py import PetriNet
 from igraph import Graph
 
@@ -20,6 +19,7 @@ class PnvDrawer:
         self.scene = scene
         self.net = net
         self.mapper: dict[Union[PetriNet.Place, PetriNet.Transition], Union[PnvQGTransitionItem, PnvQGPlaceItem]] = dict()
+        self.edited_status = False
 
     def draw_place_directly(self, x: int, y: int, r: int) -> PnvQGPlaceItem:
         # custom ellipse init
@@ -55,11 +55,15 @@ class PnvDrawer:
 
     def draw_place(self, p: PetriNet.Place) -> QGraphicsEllipseItem:
         pos, shape = self.layout(p)
-        return self.draw_place_directly(*pos, shape[0])
+        obj = self.draw_place_directly(*pos, shape[0])
+        obj.petri_net_bind(p)
+        return obj
 
     def draw_transition(self, t: PetriNet.Transition) -> QGraphicsRectItem:
         pos, shape = self.layout(t)
-        return self.draw_transition_directly(*pos, *shape, t.label)
+        obj = self.draw_transition_directly(*pos, *shape, t.label)
+        obj.petri_net_bind(t)
+        return obj
 
     def draw_arc(self, from_: Union[PetriNet.Place, PetriNet.Transition],
                  to: Union[PetriNet.Place, PetriNet.Transition]) -> PnvQGArrowItem:
@@ -89,12 +93,14 @@ class PnvDrawer:
     def draw_petri_net(self):
         if not all(self.has_layout(obj) for obj in [*self.net.places, *self.net.transitions]):
             from main import PnvMainWindow
-            if PnvMessageBoxes.accept_msg(f"Загруженная сеть не имеет предопределённую разметку.",
-                                          f"Сгенерировать разметку сети?",
-                                          icon=PnvMainWindow.WINDOW_ICON).exec() == QMessageBox.No:
+            if not PnvMessageBoxes.is_accepted(
+                    PnvMessageBoxes.accept_msg(f"Загруженная сеть не имеет предопределённую разметку.",
+                                               f"Сгенерировать разметку сети?",
+                                               icon=PnvMainWindow.WINDOW_ICON).exec()):
                 raise TypeError(PnvMainWindow.RENDER_CANCELLED)
             else:
                 self.igraph_gen_layout()
+                self.edited_status = True
         for p in self.net.places:
             self.mapper[p] = self.draw_place(p)
         for t in self.net.transitions:
@@ -120,6 +126,7 @@ class PnvDrawer:
         edges = [(local_mapper[a.source], local_mapper[a.target]) for a in self.net.arcs]
         g = Graph(n_vertices, edges)
         layout = g.layout(layout='auto')
+        # scaling
         b = layout.boundaries()
         dx = b[1][0] - b[0][0]
         dy = b[1][1] - b[0][1]
@@ -129,6 +136,7 @@ class PnvDrawer:
         else:
             k = PnvMainWindow.WINDOW_MIN_HEIGHT / dy
         layout.scale(k)
+        # injection
         for i, gen in enumerate(layout):
             lay = ((gen[0], gen[1]), (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
             PnvDrawer.inject_layout(local_mapper_re[i], lay)
@@ -155,6 +163,8 @@ class PnvViewer(QGraphicsView):
         self.extra_selected_items: set[Union[PnvQGTransitionItem, PnvQGPlaceItem]] = set()
         self.moved_selected = False
         self.scaler = 0
+
+        self.edited_status = False
         # settings
         self.setVerticalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
@@ -311,6 +321,7 @@ class PnvViewer(QGraphicsView):
                 if not self.moved_selected:
                     QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.SizeAllCursor)
                     self.moved_selected = True
+                    self.edited_status = True
                 self.last_lmp = cur
         super().mouseMoveEvent(e)
 
@@ -342,3 +353,16 @@ class PnvViewer(QGraphicsView):
             painter.drawLine(Qt.QLineF(xt, rect.y(), xt, rect.y() + rect.height()))
         for yt in range(y, y0 + 1, self.BG_PX_GRID):
             painter.drawLine(Qt.QLineF(rect.x(), yt, rect.x() + rect.width(), yt))
+
+    def inject_all_positions(self):
+        for obj in self.items():
+            if not isinstance(obj, (PnvQGPlaceItem, PnvQGTransitionItem)):
+                continue
+            bind = obj.petri_net_binded()
+            if not obj:
+                continue
+            lay: Layout = PnvDrawer.layout(bind)
+            new_lay = ((int(obj.rect().x() + lay[1][0] / 2) + obj.x(), int(obj.rect().y() + lay[1][1] / 2) + obj.y()), (lay[1][0], lay[1][1]))
+            if new_lay == lay:
+                continue
+            bind.properties['layout_information_petri'] = new_lay
