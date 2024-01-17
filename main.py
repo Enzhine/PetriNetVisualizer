@@ -1,6 +1,7 @@
 import os
 import sys
 import traceback
+import warnings
 from typing import Union
 
 import pm4py
@@ -12,6 +13,7 @@ from pm4py import PetriNet, Marking
 from pnv.render import PnvViewer, PnvDrawer
 from pnv.utils import PnvMessageBoxes, PnvConfig
 
+warnings.simplefilter('ignore')  # TODO: mk better filter later
 CURRENT_VERSION = 1.18
 APP_NAME = "Petri Net Visualizer"
 
@@ -74,6 +76,7 @@ class PnvMainWindow(QMainWindow):
         self.file_dialog = QFileDialog(self)
         self.file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
         self.file_dialog.setNameFilter("Petri-net file (*.pnml)")
+        # TODO: program close handling
 
     def create_stacked_wid(self):
         self.stacked_widget = QStackedWidget(self)
