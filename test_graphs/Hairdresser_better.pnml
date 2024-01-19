@@ -1,0 +1,204 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<pnml>
+  <net id="imported_1705703341.6121514" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
+    <name>
+      <text>imported_1705703341.6121514</text>
+    </name>
+    <page id="n0">
+      <place id="p1">
+        <name>
+          <text>
+          </text>
+        </name>
+        <initialMarking>
+          <text>1</text>
+        </initialMarking>
+        <graphics>
+          <position x="0.8999999999999986" y="300.2"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </place>
+      <place id="p5">
+        <name>
+          <text>
+          </text>
+        </name>
+        <graphics>
+          <position x="150.50584533598976" y="400.4793072583051"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </place>
+      <place id="p8">
+        <name>
+          <text>
+          </text>
+        </name>
+        <graphics>
+          <position x="550.288762120805" y="400.9708168131709"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </place>
+      <place id="p3">
+        <name>
+          <text>
+          </text>
+        </name>
+        <graphics>
+          <position x="550.8209702045815" y="300.68228280371824"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </place>
+      <place id="P_CENTER_t6">
+        <name>
+          <text>
+          </text>
+        </name>
+        <graphics>
+          <position x="500.20191926780956" y="100.00057373130257"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </place>
+      <place id="p4">
+        <name>
+          <text>
+          </text>
+        </name>
+        <graphics>
+          <position x="800.725062035738" y="300.7298406294461"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </place>
+      <place id="p6">
+        <name>
+          <text>
+          </text>
+        </name>
+        <graphics>
+          <position x="150.4888644457212" y="250.28632166149282"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </place>
+      <place id="p9">
+        <name>
+          <text>
+          </text>
+        </name>
+        <graphics>
+          <position x="300.27157093155375" y="100.63152827803766"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </place>
+      <place id="p11">
+        <name>
+          <text>
+          </text>
+        </name>
+        <graphics>
+          <position x="500.9753163389255" y="-0.10875090855762437"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </place>
+      <transition id="t4">
+        <name>
+          <text>serve coffee</text>
+        </name>
+        <graphics>
+          <position x="350.37528843213033" y="400.4575477743286"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </transition>
+      <transition id="t8">
+        <name>
+          <text>rewash hair</text>
+        </name>
+        <graphics>
+          <position x="300.55543289429534" y="-0.4795584194632454"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </transition>
+      <transition id="t6_op_2">
+        <name>
+          <text>colour hair</text>
+        </name>
+        <graphics>
+          <position x="400.05390509339344" y="100.30536537555453"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </transition>
+      <transition id="t6_op_1">
+        <name>
+          <text>colour hair</text>
+        </name>
+        <graphics>
+          <position x="550.1030225713157" y="50.50652649911814"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </transition>
+      <transition id="t6_op_3">
+        <name>
+          <text>colour hair</text>
+        </name>
+        <graphics>
+          <position x="550.3073678892617" y="150.87660633556996"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </transition>
+      <transition id="t9_op_1">
+        <name>
+          <text>pay</text>
+        </name>
+        <graphics>
+          <position x="700.8646645024324" y="300.6719858803688"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </transition>
+      <transition id="t1_op_1">
+        <name>
+          <text>wash hair</text>
+        </name>
+        <graphics>
+          <position x="100.1" y="300.59999999999997"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </transition>
+      <transition id="t2_op_1">
+        <name>
+          <text>cut hair</text>
+        </name>
+        <graphics>
+          <position x="250.39476679158457" y="200.46503916858956"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </transition>
+      <transition id="t2_op_2">
+        <name>
+          <text>cut hair</text>
+        </name>
+        <graphics>
+          <position x="250.89079328045204" y="300.81285973917727"/>
+          <dimension x="40.0" y="40.0"/>
+        </graphics>
+      </transition>
+      <arc id="2265429674256" source="p9" target="t6_op_2"/>
+      <arc id="2265429674640" source="t1_op_1" target="p5"/>
+      <arc id="2265429673872" source="p6" target="t2_op_2"/>
+      <arc id="2265429673104" source="t4" target="p8"/>
+      <arc id="2265429673488" source="p3" target="t9_op_1"/>
+      <arc id="2265429674544" source="t1_op_1" target="p6"/>
+      <arc id="2265429673008" source="p11" target="t8"/>
+      <arc id="2265429673392" source="t9_op_1" target="p4"/>
+      <arc id="2265429673776" source="t2_op_1" target="p9"/>
+      <arc id="2265429674160" source="t6_op_2" target="P_CENTER_t6"/>
+      <arc id="2265429672912" source="p5" target="t4"/>
+      <arc id="2265429673296" source="p8" target="t9_op_1"/>
+      <arc id="2265429673680" source="t2_op_2" target="p3"/>
+      <arc id="2265429674064" source="t6_op_1" target="p11"/>
+      <arc id="2265429674448" source="t6_op_3" target="p3"/>
+      <arc id="2265429674352" source="P_CENTER_t6" target="t6_op_3"/>
+      <arc id="2265429673200" source="t8" target="p9"/>
+      <arc id="2265429673584" source="p6" target="t2_op_1"/>
+      <arc id="2265429673968" source="P_CENTER_t6" target="t6_op_1"/>
+      <arc id="2265429674736" source="p1" target="t1_op_1"/>
+    </page>
+  </net>
+</pnml>

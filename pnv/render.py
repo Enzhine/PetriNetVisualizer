@@ -1,6 +1,7 @@
 from typing import Union, Optional, Tuple
 
 from PyQt5 import Qt, QtCore, QtGui
+from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsView, QApplication
 from pm4py import PetriNet
 from igraph import Graph
@@ -271,7 +272,7 @@ class PnvViewer(QGraphicsView):
             self.last_rmp = e.pos()
             return
         if self.last_lmp is not None:  # LMC hold
-            cur = self.mapToScene(e.pos())  # current pos
+            cur = self.mapToScene(e.pos()) # current pos
             to = cur - self.last_lmp  # from to
             if self.selection:
                 # if mouse moving while selecting
@@ -300,6 +301,15 @@ class PnvViewer(QGraphicsView):
                     raise Exception('MULTIPLE OBJECTS MOVE')
                 last, *_ = self.selected_items  # clicked object
                 last: Union[PnvQGTransitionItem, PnvQGPlaceItem]
+                # magnet
+                shift = QApplication.keyboardModifiers() == QtCore.Qt.KeyboardModifier.ShiftModifier
+                if shift:
+                    mnt = QPoint(round(cur.x() / self.BG_PX_GRID) * self.BG_PX_GRID,
+                                 round(cur.y() / self.BG_PX_GRID) * self.BG_PX_GRID)
+                    centered = QPoint(last.rect().x() + last.rect().width() // 2 + last.x(),
+                                      last.rect().y() + last.rect().height() // 2 + last.y())
+                    mnt_to = mnt - self.last_lmp + cur - centered
+                    to = mnt_to
                 if last in self.extra_selected_items:
                     # move all selected
                     arrows = set()

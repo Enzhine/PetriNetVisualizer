@@ -37,7 +37,6 @@ class MethodsIO:
 
 class PnvMainWindow(QMainWindow):
     WINDOW_ICON = None
-    RENDER_CANCELLED = "RENDER CANCELLED"
 
     WINDOW_MIN_WIDTH = 768
     WINDOW_MIN_HEIGHT = 512
