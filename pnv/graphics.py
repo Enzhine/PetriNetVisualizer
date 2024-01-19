@@ -229,4 +229,4 @@ class PnvQGArrowItem(QGraphicsLineItem):
         painter.setPen(self.pen())
         painter.drawLine(Qt.QLineF(ln.x2()+rot1[0], ln.y2()+rot1[1], ln.x2(), ln.y2()))
         painter.drawLine(Qt.QLineF(ln.x2()+rot2[0], ln.y2()+rot2[1], ln.x2(), ln.y2()))
-        painter.drawLine(*self.last_line())
+        painter.drawLine(*map(int, self.last_line()))

@@ -9,7 +9,24 @@ import json
 
 class PnvMessageBoxes:
     @staticmethod
-    def warning_msg(text: str, inf_text: str = None, title: str = "Внимание!", icon=None) -> QMessageBox:
+    def proceed(text: str, inf_text: str = None, title: str = "Внимание!", icon=None) -> QMessageBox:
+        wm = QMessageBox()
+        wm.setIcon(QMessageBox.Information)
+
+        wm.setWindowTitle(title)
+        wm.setText(text)
+
+        wm.setStandardButtons(QMessageBox.Ok)
+        wm.setDefaultButton(QMessageBox.Ok)
+        wm.setWindowFlags(Qt.CustomizeWindowHint | Qt.WindowTitleHint)
+        if icon:
+            wm.setWindowIcon(icon)
+        if inf_text:
+            wm.setInformativeText(inf_text)
+        return wm
+
+    @staticmethod
+    def warning(text: str, inf_text: str = None, title: str = "Внимание!", icon=None) -> QMessageBox:
         wm = QMessageBox()
         wm.setIcon(QMessageBox.Warning)
 
@@ -23,7 +40,7 @@ class PnvMessageBoxes:
         return wm
 
     @staticmethod
-    def accept_msg(text: str, inf_text: str = None, title: str = "Требуется подтверждение!", icon=None) -> QMessageBox:
+    def accept(text: str, inf_text: str = None, title: str = "Требуется подтверждение!", icon=None) -> QMessageBox:
         wm = QMessageBox()
         wm.setIcon(QMessageBox.Question)
 
@@ -41,7 +58,7 @@ class PnvMessageBoxes:
         return wm
 
     @staticmethod
-    def question_msg(text: str, inf_text: str = None, title: str = "Внимание!", icon=None) -> QMessageBox:
+    def question(text: str, inf_text: str = None, title: str = "Внимание!", icon=None) -> QMessageBox:
         wm = QMessageBox()
         wm.setIcon(QMessageBox.Question)
 

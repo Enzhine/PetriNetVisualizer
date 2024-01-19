@@ -93,14 +93,11 @@ class PnvDrawer:
     def draw_petri_net(self):
         if not all(self.has_layout(obj) for obj in [*self.net.places, *self.net.transitions]):
             from main import PnvMainWindow
-            if not PnvMessageBoxes.is_accepted(
-                    PnvMessageBoxes.accept_msg(f"Загруженная сеть не имеет предопределённую разметку.",
-                                               f"Сгенерировать разметку сети?",
-                                               icon=PnvMainWindow.WINDOW_ICON).exec()):
-                raise TypeError(PnvMainWindow.RENDER_CANCELLED)
-            else:
-                self.igraph_gen_layout()
-                self.edited_status = True
+            PnvMessageBoxes.proceed(f"Загруженная сеть не имеет предопределённую разметку!",
+                                    f"Будет произведена генерация автоматической разметки.",
+                                    icon=PnvMainWindow.WINDOW_ICON).exec()
+            self.igraph_gen_layout()
+            self.edited_status = True
         for p in self.net.places:
             self.mapper[p] = self.draw_place(p)
         for t in self.net.transitions:
@@ -168,8 +165,8 @@ class PnvViewer(QGraphicsView):
         # settings
         self.setVerticalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
-        self.horizontalScrollBar().setEnabled(False)
-        self.verticalScrollBar().setEnabled(False)
+        self.horizontalScrollBar().setDisabled(True)
+        self.verticalScrollBar().setDisabled(True)
 
     def scale_factor(self):
         return self.inwards ** self.scaler
@@ -266,10 +263,13 @@ class PnvViewer(QGraphicsView):
     def mouseMoveEvent(self, e: Optional[QtGui.QMouseEvent]) -> None:
         if self.last_rmp is not None:  # RMC hold
             delta = self.last_rmp - e.pos()
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() + delta.y())
             self.setSceneRect(
                 self.sceneRect().translated(delta.x() / self.transform().m11(), delta.y() / self.transform().m22())
             )
             self.last_rmp = e.pos()
+            return
         if self.last_lmp is not None:  # LMC hold
             cur = self.mapToScene(e.pos())  # current pos
             to = cur - self.last_lmp  # from to
