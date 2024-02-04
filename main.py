@@ -1,3 +1,4 @@
+import logging
 import os
 import pathlib
 import sys
@@ -8,8 +9,9 @@ import pm4py
 from pm4py import PetriNet, Marking
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QMenuBar, QFileDialog, QStackedWidget, \
-    QGraphicsScene, QGraphicsView, QLabel, QTabWidget, QMessageBox, QAction
+    QGraphicsScene, QGraphicsView, QLabel, QTabWidget, QMessageBox, QAction, QStyle
 
+from pnv.importer import epnml
 from pnv.render import PnvViewer, PnvDrawer
 from pnv.utils import PnvMessageBoxes, PnvConfig
 
@@ -81,7 +83,7 @@ class PnvMainWindow(QMainWindow):
 
         self.file_dialog = QFileDialog(self)
         self.file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        self.file_dialog.setNameFilter("Petri-net file (*.pnml)")
+        self.file_dialog.setNameFilters(["Petri-net file (*.pnml)", "Extended Petri-net file (*.epnml)"])
 
     def create_stacked_wid(self):
         self.stacked_widget = QStackedWidget(self)
@@ -104,8 +106,10 @@ class PnvMainWindow(QMainWindow):
         file_menu = QMenu("&Файл", self)
         file_menu.aboutToShow.connect(self.file_menu_update)
         self.menu_bar.addMenu(file_menu)
-        file_menu.addAction("&Открыть...", self.open_file)
-        self.save_action = QAction("&Сохранить", self)
+        file_menu.addAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon), "&Открыть...", self.open_file)
+        file_menu.addSeparator()
+        self.save_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton), "&Сохранить",
+                                   self)
         self.save_action.triggered.connect(self.save_file)
         self.save_as_action = QAction("&Сохранить как...", self)
         self.save_as_action.triggered.connect(self.save_file_as)
@@ -114,7 +118,8 @@ class PnvMainWindow(QMainWindow):
 
         help_menu = QMenu("&Помощь", self)
         self.menu_bar.addMenu(help_menu)
-        help_menu.addAction("&О программе", self.open_dev_info)
+        help_menu.addAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation), "&О программе",
+                            self.open_dev_info)
 
     @QtCore.pyqtSlot()
     def file_menu_update(self):
@@ -192,32 +197,39 @@ class PnvMainWindow(QMainWindow):
     def get_new_file_path(self):
         return QFileDialog.getSaveFileName(self, filter="Petri-net file (*.pnml)")[0]
 
-    def load_pnml(self, path: str):
+    def load_petri_net_file(self, path: str):
         pn = im = fm = None
         for gd in self.graphs:
             if gd.path == path:
                 self.tabs.setCurrentIndex(gd.tab_idx)
                 return
         try:
-            pn, im, fm = pm4py.read_pnml(path)
+            # load
+            if path.endswith('.pnml'):
+                pn, im, fm = pm4py.read_pnml(path)
+            elif path.endswith('.epnml'):
+                pn, im, fm = epnml.import_net(path, None)
+            # check
             if all(len(t) == 0 for t in [pn.places, pn.transitions]):
                 PnvMessageBoxes.warning("Загружена пустая сеть!",
-                                        icon=self.window_icon).exec()
+                                        icon=PnvMainWindow.WINDOW_ICON).exec()
                 return
             if len(pn.arcs) == 0:
                 PnvMessageBoxes.warning("Невозможно отобразить бессвязную сеть!",
-                                        icon=self.window_icon).exec()
+                                        icon=PnvMainWindow.WINDOW_ICON).exec()
                 return
+            # some graph render data:
             # https://www.graphviz.org/documentation/TSE93.pdf
         except Exception as ex:
             PnvMessageBoxes.warning("Возникла ошибка при открытии файла!",
                                     inf_text=f"{ex.__class__.__name__}: {ex}",
-                                    icon=self.window_icon).exec()
+                                    icon=PnvMainWindow.WINDOW_ICON).exec()
+            traceback.print_exc()
         if pn:
             name = os.path.basename(path)
             gr = QGraphicsScene(self)
-            viewer = PnvViewer(gr)
             drawer = PnvDrawer(gr, pn)
+            viewer = PnvViewer(gr, drawer=drawer)
             try:
                 drawer.draw_petri_net()
             except TypeError as te:
@@ -246,7 +258,7 @@ class PnvMainWindow(QMainWindow):
     def open_file(self):
         path = self.get_existing_file_path()
         if path:
-            self.load_pnml(path)
+            self.load_petri_net_file(path)
 
     @QtCore.pyqtSlot()
     def save_file(self):
@@ -271,9 +283,9 @@ class PnvMainWindow(QMainWindow):
         path = self.get_new_file_path()
         if len(path) != 0:
             if pathlib.Path(path).exists() and not PnvMessageBoxes.is_accepted(
-                PnvMessageBoxes.accept(f"Выбранный файл уже существует!",
-                                       f"Файл будет перезаписан. Продолжить?",
-                                       icon=PnvMainWindow.WINDOW_ICON).exec()):
+                    PnvMessageBoxes.accept(f"Выбранный файл уже существует!",
+                                           f"Файл будет перезаписан. Продолжить?",
+                                           icon=PnvMainWindow.WINDOW_ICON).exec()):
                 return
             idx = self.tabs.currentIndex()
             g = self.find_graph(idx)
@@ -296,13 +308,38 @@ class PnvMainWindow(QMainWindow):
         self.tabs.setTabText(idx, name)
 
 
+rootLogger = None
+
+
+def log_handler(type: QtCore.QtMsgType, context: QtCore.QMessageLogContext, msg: str):
+    if type == QtCore.QtMsgType.QtCriticalMsg:  # qCritical()
+        level = logging.CRITICAL
+    elif type == QtCore.QtMsgType.QtFatalMsg:  # qFatal()
+        level = logging.ERROR
+    elif type == QtCore.QtMsgType.QtWarningMsg:  # qWarning()
+        level = logging.WARNING
+    elif type == QtCore.QtMsgType.QtInfoMsg:  # qInfo()
+        level = logging.INFO
+    elif type == QtCore.QtMsgType.QtDebugMsg:  # qDebug()
+        level = logging.DEBUG
+    else:
+        level = logging.DEBUG
+    rootLogger.log(level, "%s", msg)
+
+
 def application():
+    logging.basicConfig()
+    root_logger = logging.getLogger(__name__)
+    root_logger.setLevel(logging.INFO)
+
     app = QApplication(sys.argv)
     main_window = PnvMainWindow()
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(f'{CURRENT_VERSION}')
 
     main_window.show()
+    root_logger.info('!')
+    QtCore.qInstallMessageHandler(log_handler)
     sys.exit(app.exec_())
 
 

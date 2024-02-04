@@ -1,0 +1,66 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<pnml>
+  <net id="imported_1705961577.5475488" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
+    <name>
+      <text>imported_1705961577.5475488</text>
+    </name>
+    <page id="n0">
+      <place id="p1">
+        <name>
+          <text>p1</text>
+        </name>
+        <initialMarking>
+          <text>1</text>
+        </initialMarking>
+        <graphics>
+          <position x="99.843478152883" y="-200.5913468404418"/>
+          <dimension x="40" y="40"/>
+        </graphics>
+      </place>
+      <place id="p2">
+        <name>
+          <text>p2</text>
+        </name>
+        <graphics>
+          <position x="-100.06812748756636" y="-199.4836852922366"/>
+          <dimension x="40" y="40"/>
+        </graphics>
+      </place>
+      <transition id="g1">
+        <name>
+          <text>g1</text>
+        </name>
+        <graphics>
+          <position x="2.6243488087624485" y="-199.88006904645107"/>
+          <dimension x="40" y="40"/>
+        </graphics>
+        <page id="n1">
+          <place id="p4">
+            <name>
+              <text>p4</text>
+            </name>
+            <initialMarking>
+              <text>1</text>
+            </initialMarking>
+          </place>
+          <transition id="t3">
+            <name>
+              <text>t3</text>
+            </name>
+          </transition>
+          <transition id="t4">
+            <name>
+              <text>t4</text>
+            </name>
+          </transition>
+          <arc id="2090410290144" source="p4" target="t4"/>
+          <arc id="2090410290145" source="t3" target="p4"/>
+          <arc id="2090410290146" source="t4" target="p2"/>
+          <arc id="2090410290146" source="p1" target="t3"/>
+        </page>
+      </transition>
+      <arc id="2090410290240" source="p1" target="g1"/>
+      <arc id="2090410290144" source="g1" target="p2"/>
+    </page>
+  </net>
+</pnml>

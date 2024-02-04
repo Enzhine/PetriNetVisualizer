@@ -1,0 +1,49 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<pnml>
+  <net id="imported_1705961577.5475488" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
+    <name>
+      <text>imported_1705961577.5475488</text>
+    </name>
+    <page id="n0">
+      <place id="p1">
+        <name>
+          <text>p1</text>
+        </name>
+        <initialMarking>
+          <text>1</text>
+        </initialMarking>
+        <graphics>
+          <position x="99.843478152883" y="-200.5913468404418"/>
+          <dimension x="40" y="40"/>
+        </graphics>
+      </place>
+      <place id="p2">
+        <name>
+          <text>p2</text>
+        </name>
+        <graphics>
+          <position x="-100.06812748756636" y="-199.4836852922366"/>
+          <dimension x="40" y="40"/>
+        </graphics>
+      </place>
+      <transition id="t1">
+            <name>
+              <text>t1</text>
+            </name>
+            <graphics>
+              <position x="2.6243488087624485" y="-199.88006904645107"/>
+              <dimension x="40" y="40"/>
+            </graphics>
+      </transition>
+      <arc id="2090410290240" source="p1" target="t1"/>
+      <arc id="2090410290144" source="t1" target="p2"/>
+    </page>
+    <finalmarkings>
+        <marking>
+        <place idref="p2">
+        <text>1</text>
+        </place>
+        </marking>
+    </finalmarkings>
+  </net>
+</pnml>

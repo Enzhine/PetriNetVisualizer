@@ -1,18 +1,46 @@
 from typing import Union, Optional
 
 from PyQt5 import Qt, QtGui, QtCore
+from PyQt5.QtCore import QRectF
+from PyQt5.QtGui import QBrush, QColor, QTextOption
 from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsSceneContextMenuEvent, \
-    QGraphicsSceneHoverEvent, QStyleOptionGraphicsItem, QWidget, QGraphicsRectItem, QGraphicsLineItem
+    QGraphicsSceneHoverEvent, QStyleOptionGraphicsItem, QWidget, QGraphicsRectItem, QGraphicsLineItem, QMenu, QStyle
 import math
 import numpy as np
 from pm4py import PetriNet
+
+import pnv.importer.epnml
+from pnv.utils import PnvMessageBoxes
+
+
+class Markable:
+    def __init__(self, marks=0, final=False):
+        self.__markings = marks
+        self.__is_final = final
+
+    def __get_markings(self):
+        return self.__markings
+
+    def __set_markings(self, val: int):
+        if val < 0:
+            return
+        self.__markings = val
+
+    def __get_final(self):
+        return self.__is_final
+
+    def __set_final(self, val: bool):
+        self.__is_final = val
+
+    final = property(__get_final, __set_final)
+    markings = property(__get_markings, __set_markings)
 
 
 class PetriNetBind:
     def __init__(self):
         self.__petri_net_obj: Union[PetriNet.Place, PetriNet.Transition, None] = None
 
-    def petri_net_binded(self) -> Union[PetriNet.Place, PetriNet.Transition, None]:
+    def petri_net_bound(self) -> Union[PetriNet.Place, PetriNet.Transition, None]:
         return self.__petri_net_obj
 
     def petri_net_bind(self, obj: Union[PetriNet.Place, PetriNet.Transition]):
@@ -76,14 +104,24 @@ class HoverSelectable:
         self.manual_update()
 
 
-class PnvQGPlaceItem(QGraphicsEllipseItem, HoverSelectable, PetriNetBind):
+class PnvQGPlaceItem(QGraphicsEllipseItem, HoverSelectable, PetriNetBind, Markable):
     def __init__(self, *args, **kwargs):
         super(PetriNetBind, self).__init__()
         super(QGraphicsEllipseItem, self).__init__(*args, **kwargs)  # Universal constructor bypass
         self.setAcceptHoverEvents(True)
         super(HoverSelectable, self).__init__()
+        super(Markable, self).__init__()
+        #
+        self.setPen(Qt.QPen(Qt.Qt.black, 3))
+        self.setBrush(Qt.QBrush(Qt.Qt.white))
+
+        self.set_hovered_brush(Qt.QBrush(Qt.Qt.lightGray))
+        self.set_selected_brush(Qt.QBrush(Qt.QColor(0xafadff)))
         # arrows holder
-        self.arrows: set[PnvQGArrowItem] = set()
+        self.__arrows: set[PnvQGArrowItem] = set()
+
+    def arrows(self) -> set['PnvQGArrowItem']:
+        return self.__arrows
 
     def pen(self) -> QtGui.QPen:
         ret = self.get_pen()
@@ -109,15 +147,82 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, HoverSelectable, PetriNetBind):
         painter.setPen(self.pen())
         painter.setBrush(self.brush())
         painter.drawEllipse(self.rect())
+        if self.final:
+            offset = 4 * painter.pen().width()
+            sub = QRectF(self.rect().x() + offset // 2, self.rect().y() + offset // 2,
+                         self.rect().width() - offset, self.rect().height() - offset)
+            painter.drawEllipse(sub)
+        elif self.markings > 0:
+            painter.setBrush(QBrush(QColor('0x000000')))
+            if self.markings == 1:
+                one = QRectF(self.rect().x() + self.rect().width() // 2 - self.rect().width() // 6,
+                             self.rect().y() + self.rect().height() // 2 - self.rect().height() // 6,
+                             self.rect().width() // 3, self.rect().height() // 3)
+                painter.drawEllipse(one)
+            elif self.markings == 2:
+                rect = QRectF(self.rect().x() + self.rect().width() // 2 - self.rect().width() // 6,
+                              self.rect().y() + self.rect().height() // 2 - self.rect().height() // 6,
+                              self.rect().width() // 3, self.rect().height() // 3)
+                one = rect.translated(-(rect.width() // 2 + rect.width() // 4), 0)
+                two = rect.translated(rect.width() // 2 + rect.width() // 4, 0)
+                painter.drawEllipse(one)
+                painter.drawEllipse(two)
+            elif self.markings == 3:
+                rect = QRectF(self.rect().x() + self.rect().width() // 2 - self.rect().width() // 8,
+                              self.rect().y() + self.rect().height() // 2 - self.rect().height() // 8,
+                              self.rect().width() // 4, self.rect().height() // 4)
+                one = rect.translated(-0.866 * rect.width(),
+                                      -0.5 * rect.width())
+                two = rect.translated(0.866 * rect.width(),
+                                      -0.5 * rect.width())
+                three = rect.translated(0, rect.width())
+                painter.drawEllipse(one)
+                painter.drawEllipse(two)
+                painter.drawEllipse(three)
+            elif self.markings == 4:
+                rect = QRectF(self.rect().x() + self.rect().width() // 2 - self.rect().width() // 8,
+                              self.rect().y() + self.rect().height() // 2 - self.rect().height() // 8,
+                              self.rect().width() // 4, self.rect().height() // 4)
+                one = rect.translated(-0.707 * rect.width(),
+                                      0.707 * rect.width())
+                two = rect.translated(-0.707 * rect.width(),
+                                      -0.707 * rect.width())
+                three = rect.translated(0.707 * rect.width(),
+                                        -0.707 * rect.width())
+                four = rect.translated(0.707 * rect.width(),
+                                       0.707 * rect.width())
+                painter.drawEllipse(one)
+                painter.drawEllipse(two)
+                painter.drawEllipse(three)
+                painter.drawEllipse(four)
+            else:
+                f = painter.font()
+                text = str(self.markings)
+                f.setPixelSize(int(self.rect().width() * 0.8 - 8*(len(text)-1)))
+                painter.setFont(f)
+                fm = Qt.QFontMetrics(f)
+                rect = fm.tightBoundingRect(text)
+                painter.drawText(self.rect().x() + self.rect().width() // 2 - rect.width() // 2,
+                                 self.rect().y() + self.rect().height() // 2 + rect.height() // 2, text)
 
-    def contextMenuEvent(self, event: Optional[QGraphicsSceneContextMenuEvent]) -> None:
-
-        #     cmenu = QMenu(self.scene().parent())
-        #     cmenu.addAction('&ACTION')
-        #     cmenu.exec(event.screenPos())
-        # fix hovering as well
-        # MIGHT BE USED
-        super(PnvQGPlaceItem, self).contextMenuEvent(event)
+    # def contextMenuEvent(self, event: Optional[QGraphicsSceneContextMenuEvent]) -> None:
+    #     if self.petri_net_binded():
+    #         place: PetriNet.Place = self.petri_net_binded()
+    #         cmenu = QMenu(self.scene().parent())
+    #         if not self.final:
+    #             def _temp_set():
+    #                 self.final = True
+    #                 self.update()
+    #
+    #             cmenu.addAction('&Set final marking', _temp_set)
+    #         else:
+    #             def _temp_set():
+    #                 self.final = False
+    #                 self.update()
+    #
+    #             cmenu.addAction('&Set non-final marking', _temp_set)
+    #         cmenu.exec(event.screenPos())
+    #     super(PnvQGPlaceItem, self).contextMenuEvent(event)
 
 
 class PnvQGTransitionItem(QGraphicsRectItem, HoverSelectable, PetriNetBind):
@@ -128,7 +233,16 @@ class PnvQGTransitionItem(QGraphicsRectItem, HoverSelectable, PetriNetBind):
         self.setAcceptHoverEvents(True)
         super(HoverSelectable, self).__init__()
         # arrows holder
-        self.arrows: set[PnvQGArrowItem] = set()
+        self.setPen(Qt.QPen(Qt.Qt.black, 3))
+        self.setBrush(Qt.QBrush(Qt.Qt.white))
+        self.set_hovered_brush(Qt.QBrush(Qt.Qt.lightGray))
+        self.set_selected_brush(Qt.QBrush(Qt.QColor(0xafafff)))
+        #
+        self.__arrows: set[PnvQGArrowItem] = set()
+        self.drawer = None
+
+    def arrows(self) -> set['PnvQGArrowItem']:
+        return self.__arrows
 
     def pen(self) -> QtGui.QPen:
         ret = self.get_pen()
@@ -155,6 +269,35 @@ class PnvQGTransitionItem(QGraphicsRectItem, HoverSelectable, PetriNetBind):
         painter.setBrush(self.brush())
         painter.drawRect(self.rect())
 
+    def petri_net_bind(self, obj: Union[PetriNet.Place, PetriNet.Transition]):
+        if isinstance(obj, pnv.importer.epnml.ExtendedTransition):
+            self.setPen(Qt.QPen(Qt.Qt.black, 3, Qt.Qt.DashLine))
+        else:
+            self.setPen(Qt.QPen(Qt.Qt.black, 3))
+        super().petri_net_bind(obj)
+
+    def contextMenuEvent(self, event: Optional[QGraphicsSceneContextMenuEvent]) -> None:
+        if self.petri_net_bound():
+            trans: PetriNet.Transition = self.petri_net_bound()
+            cmenu = QMenu(self.scene().parent())
+            if isinstance(trans, pnv.importer.epnml.ExtendedTransition):
+                cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp),
+                                '&Раскрыть подсеть', self.open_subnet)
+                cmenu.addSeparator()
+            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxCritical), '&Удалить')
+            cmenu.exec(event.screenPos())
+        super(PnvQGTransitionItem, self).contextMenuEvent(event)
+
+    def open_subnet(self):
+        try:
+            self.drawer.subnet_unwrap(self)
+        except pnv.importer.epnml.EPNMLException as ex:
+            from main import PnvMainWindow
+            PnvMessageBoxes.warning(f"Невозможно раскрыть вложенную сеть!",
+                                    f"{ex}",
+                                    icon=PnvMainWindow.WINDOW_ICON).exec()
+        print('OPEN MILESTONE')
+
 
 class PnvQGArrowItem(QGraphicsLineItem):
     def __init__(self, from_, to):
@@ -166,6 +309,7 @@ class PnvQGArrowItem(QGraphicsLineItem):
         self._x2: float = 0
         self._y2: float = 0
         super(QGraphicsLineItem, self).__init__(line)
+        self.setPen(Qt.QPen(Qt.Qt.black, 3))
 
     def from_point(self) -> tuple[float, float]:
         return self.from_.rect().x() + self.from_.x(), self.from_.rect().y() + self.from_.y()
@@ -186,6 +330,7 @@ class PnvQGArrowItem(QGraphicsLineItem):
         return self._x2, self._y2
 
     def last_line(self) -> tuple[float, float, float, float]:
+        # TODO: somehow fix transition arrow
         xy0, s0 = self.from_point(), self.from_sizes()
         xy1, s1 = self.to_point(), self.to_sizes()
         vec = (xy1[0] - xy0[0], xy1[1] - xy0[1])
@@ -200,7 +345,7 @@ class PnvQGArrowItem(QGraphicsLineItem):
             xy1 = (xy1[0] - vec[0] * s1[0] / 2 / d, xy1[1] - vec[1] * s1[1] / 2 / d)
         elif isinstance(self.to, PnvQGTransitionItem):
             xy1 = (xy1[0] + max(min(-vec[0], s1[0] / 2), -s1[0] / 2), xy1[1] + max(min(-vec[1], s1[1] / 2), -s1[1] / 2))
-        return xy0[0] + s0[0]/2, xy0[1] + s0[1]/2, xy1[0] + s1[0]/2, xy1[1] + + s1[1]/2
+        return xy0[0] + s0[0] / 2, xy0[1] + s0[1] / 2, xy1[0] + s1[0] / 2, xy1[1] + + s1[1] / 2
 
     def update(self, rect: QtCore.QRectF = ...) -> None:
         self._x1, self._y1, self._x2, self._y2 = self.last_line()
@@ -210,7 +355,7 @@ class PnvQGArrowItem(QGraphicsLineItem):
     def shape(self) -> QtGui.QPainterPath:
         path = super(PnvQGArrowItem, self).shape()
         xy1 = self.to_bound()
-        path.addRect(Qt.QRectF(xy1[0]-10, xy1[1]-10, 20, 20))
+        path.addRect(Qt.QRectF(xy1[0] - 10, xy1[1] - 10, 20, 20))
         return path
 
     @staticmethod
@@ -227,6 +372,6 @@ class PnvQGArrowItem(QGraphicsLineItem):
         rot1 = self.rotated(vec, 30)
         rot2 = self.rotated(vec, -30)
         painter.setPen(self.pen())
-        painter.drawLine(Qt.QLineF(ln.x2()+rot1[0], ln.y2()+rot1[1], ln.x2(), ln.y2()))
-        painter.drawLine(Qt.QLineF(ln.x2()+rot2[0], ln.y2()+rot2[1], ln.x2(), ln.y2()))
-        painter.drawLine(*map(int, self.last_line()))
+        painter.drawLine(Qt.QLineF(ln.x2() + rot1[0], ln.y2() + rot1[1], ln.x2(), ln.y2()))
+        painter.drawLine(Qt.QLineF(ln.x2() + rot2[0], ln.y2() + rot2[1], ln.x2(), ln.y2()))
+        painter.drawLine(Qt.QLineF(ln.x1(), ln.y1(), ln.x2(), ln.y2()))
