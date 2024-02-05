@@ -296,7 +296,6 @@ class PnvQGTransitionItem(QGraphicsRectItem, HoverSelectable, PetriNetBind):
             PnvMessageBoxes.warning(f"Невозможно раскрыть вложенную сеть!",
                                     f"{ex}",
                                     icon=PnvMainWindow.WINDOW_ICON).exec()
-        print('OPEN MILESTONE')
 
 
 class PnvQGArrowItem(QGraphicsLineItem):

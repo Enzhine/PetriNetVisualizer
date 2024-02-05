@@ -416,8 +416,8 @@ class PnvItemsTransformer:
             else:
                 if PnvViewSelector.shift_pressed():
                     to = self.__nearest_grid(self.__viewer.mouse_ctrl.last_pos()) - \
-                         (spec.pos() + QPoint(spec.rect().x() + spec.rect().width() // 2,
-                                              spec.rect().y() + spec.rect().height() // 2))
+                         (spec.pos() + QPoint(int(spec.rect().x() + spec.rect().width() // 2),
+                                              int(spec.rect().y() + spec.rect().height() // 2)))
                 else:
                     to = self.__viewer.mouse_ctrl.delta
             self.__transform(to)
@@ -439,11 +439,11 @@ class PnvViewTransformer:
             self.__started = True
             QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.ClosedHandCursor)
             delta = -self.__viewer.mouse_ctrl.delta
-            self.__viewer.horizontalScrollBar().setValue(self.__viewer.horizontalScrollBar().value() + delta.x())
-            self.__viewer.verticalScrollBar().setValue(self.__viewer.verticalScrollBar().value() + delta.y())
+            self.__viewer.horizontalScrollBar().setValue(int(self.__viewer.horizontalScrollBar().value() + delta.x()))
+            self.__viewer.verticalScrollBar().setValue(int(self.__viewer.verticalScrollBar().value() + delta.y()))
             self.__viewer.setSceneRect(
-                self.__viewer.sceneRect().translated(delta.x() / self.__viewer.transform().m11(),
-                                                     delta.y() / self.__viewer.transform().m22())
+                self.__viewer.sceneRect().translated(delta.x(),
+                                                     delta.y())
             )
             self.__viewer.mouse_ctrl.force_last_pos(self.__viewer.mouse_ctrl.last_pos() + delta)
         elif self.__started:
@@ -688,7 +688,6 @@ class PnvViewer(QGraphicsView):
             PnvMessageBoxes.warning(f"Невозможно сделать вложенную сеть!",
                                     f"{ex}",
                                     icon=PnvMainWindow.WINDOW_ICON).exec()
-        print('ENCLOSE MILESTONE')
 
     def drawBackground(self, painter: Optional[QtGui.QPainter], rect: QtCore.QRectF) -> None:
         painter.fillRect(rect, self.bg_brush)
