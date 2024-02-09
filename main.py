@@ -129,7 +129,7 @@ class PnvMainWindow(QMainWindow):
     @QtCore.pyqtSlot()
     def open_dev_info(self):
         wm = QMessageBox()
-        wm.setIcon(QMessageBox.Information)
+        wm.setIcon(QMessageBox.Question)
 
         # text data
         wm.setWindowTitle("Информация о программе")

@@ -3,8 +3,8 @@ from typing import Union, Optional, Tuple
 
 from PyQt5 import Qt, QtCore, QtGui
 from PyQt5.QtCore import QPoint
-from PyQt5.QtWidgets import QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsView, QApplication, QMenu, \
-    QStyle
+from PyQt5.QtWidgets import QGraphicsScene, QGraphicsRectItem, QGraphicsView, QApplication, QMenu, \
+    QStyle, QPushButton
 from pm4py import PetriNet
 from igraph import Graph
 
@@ -23,7 +23,7 @@ class PnvDrawer:
         self.scene = scene
         self.net = net
         self.mapper: dict[Union[PetriNet.Place, PetriNet.Transition],
-                          Union[PnvQGTransitionItem, PnvQGPlaceItem]] = dict()
+        Union[PnvQGTransitionItem, PnvQGPlaceItem]] = dict()
         self.edited_status = False
 
     def draw_place_directly(self, x: int, y: int, r: int) -> PnvQGPlaceItem:
@@ -46,13 +46,13 @@ class PnvDrawer:
             text.setAcceptHoverEvents(False)
         return obj
 
-    def draw_place(self, p: PetriNet.Place) -> QGraphicsEllipseItem:
+    def draw_place(self, p: PetriNet.Place) -> PnvQGPlaceItem:
         pos, shape = self.layout(p)
         obj = self.draw_place_directly(*pos, shape[0])
         obj.petri_net_bind(p)
         return obj
 
-    def draw_transition(self, t: PetriNet.Transition) -> QGraphicsRectItem:
+    def draw_transition(self, t: PetriNet.Transition) -> PnvQGTransitionItem:
         pos, shape = self.layout(t)
         obj = self.draw_transition_directly(*pos, *shape, t.label)
         obj.drawer = self
@@ -68,7 +68,7 @@ class PnvDrawer:
     @staticmethod
     def has_layout(obj):
         return hasattr(obj, 'properties') and ('layout_information_petri' in obj.properties) \
-               and isinstance(obj.properties['layout_information_petri'], tuple)
+            and isinstance(obj.properties['layout_information_petri'], tuple)
 
     @staticmethod
     def inject_layout(obj, layout: Layout):
@@ -347,6 +347,27 @@ def mod(num: int, other: int):
     return -abs(num % other)
 
 
+class PnvToggleableComponent:
+    def __init__(self, enabled=True):
+        self.__enabled = enabled
+
+    def on_enable(self):
+        ...
+
+    def on_disable(self):
+        ...
+
+    def is_enabled(self):
+        return self.__enabled
+
+    def set_enabled(self, val: bool):
+        self.__enabled = val
+        if val:
+            self.on_enable()
+        else:
+            self.on_disable()
+
+
 class PnvViewScaler:
     def __init__(self, viewer: 'PnvViewer'):
         self.__viewer = viewer
@@ -377,68 +398,6 @@ class PnvViewScaler:
 
     def scale_factor(self):
         return self.inwards ** self.scaler
-
-
-class PnvItemsTransformer:
-    def __init__(self, view: 'PnvViewer'):
-        self.__viewer = view
-        self.moving = False
-        self.__start_pos = None  # transform started mark
-
-    def __transform(self, to: QPoint):
-        arrows = set()
-        for item in self.__viewer.view_selector.selected_items:
-            item.setX(item.x() + to.x())
-            item.setY(item.y() + to.y())
-            arrows |= item.arrows()
-        for arr in arrows:
-            arr.update(arr.boundingRect())
-
-    def __is_started(self):
-        return self.__start_pos
-
-    def __start_transform(self):
-        self.__start_pos = self.__viewer.mouse_ctrl.last_pos()
-        QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.SizeAllCursor)
-
-    def __stop_transform(self):
-        self.__start_pos = None
-        QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.ArrowCursor)
-
-    def __pass_loyal_offset(self):
-        local_delta = self.__viewer.mouse_ctrl.last_pos() - self.__start_pos  # loyal offset delta
-        if max(abs(local_delta.x()), abs(local_delta.y())) <= (2.0 / self.__viewer.view_scaler.scale_factor()):
-            return None
-        return local_delta
-
-    def __nearest_grid(self, last):
-        return QPoint(round(last.x() / self.__viewer.grid_distance) * self.__viewer.grid_distance,
-                      round(last.y() / self.__viewer.grid_distance) * self.__viewer.grid_distance)
-
-    def update(self):
-        spec: Union[PnvQGTransitionItem, PnvQGPlaceItem] = self.__viewer.view_selector.selected_special
-        if self.__viewer.mouse_ctrl.holding and spec:
-            if not self.__is_started():
-                self.__start_transform()
-            if not self.moving:
-                to = self.__pass_loyal_offset()
-                if not to:
-                    return  # not passed
-                self.moving = True
-            else:
-                if PnvViewSelector.shift_pressed():
-                    to = self.__nearest_grid(self.__viewer.mouse_ctrl.last_pos()) - \
-                         (spec.pos() + QPoint(int(spec.rect().x() + spec.rect().width() // 2),
-                                              int(spec.rect().y() + spec.rect().height() // 2)))
-                else:
-                    to = self.__viewer.mouse_ctrl.delta
-            self.__transform(to)
-        elif self.__is_started():
-            if not self.moving and spec:
-                self.__viewer.view_selector.select_special(spec, not PnvViewSelector.shift_pressed())
-                # selector hook-back
-            self.moving = False
-            self.__stop_transform()
 
 
 class PnvViewTransformer:
@@ -496,14 +455,93 @@ class PnvMouseController:
             self.holding = False
 
 
-class PnvViewContextFirer:
+class PnvItemsTransformer(PnvToggleableComponent):
     def __init__(self, view: 'PnvViewer'):
+        super().__init__()
+        self.__viewer = view
+        self.moving = False
+        self.__start_pos = None  # transform started mark
+
+    def __transform(self, to: QPoint):
+        arrows = set()
+        for item in self.__viewer.view_selector.selected_items:
+            item.setX(item.x() + to.x())
+            item.setY(item.y() + to.y())
+            arrows |= item.arrows()
+        for arr in arrows:
+            arr.update(arr.boundingRect())
+
+    def __is_started(self):
+        return self.__start_pos
+
+    def __start_transform(self):
+        self.__start_pos = self.__viewer.mouse_ctrl.last_pos()
+        QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.SizeAllCursor)
+
+    def __stop_transform(self):
+        self.__start_pos = None
+        QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.ArrowCursor)
+
+    def __pass_loyal_offset(self):
+        local_delta = self.__viewer.mouse_ctrl.last_pos() - self.__start_pos  # loyal offset delta
+        if max(abs(local_delta.x()), abs(local_delta.y())) <= (2.0 / self.__viewer.view_scaler.scale_factor()):
+            return None
+        return local_delta
+
+    def __nearest_grid(self, last):
+        return QPoint(round(last.x() / self.__viewer.grid_distance) * self.__viewer.grid_distance,
+                      round(last.y() / self.__viewer.grid_distance) * self.__viewer.grid_distance)
+
+    def on_disable(self):
+        if self.__is_started():
+            self.moving = False
+            self.__stop_transform()
+
+    def update(self):
+        if not self.is_enabled():
+            return
+        spec: Union[PnvQGTransitionItem, PnvQGPlaceItem] = self.__viewer.view_selector.selected_special
+        if self.__viewer.mouse_ctrl.holding and spec:
+            if not self.__is_started():
+                self.__start_transform()
+            if not self.moving:
+                to = self.__pass_loyal_offset()
+                if not to:
+                    return  # not passed
+                self.moving = True
+            else:
+                if PnvViewSelector.shift_pressed():
+                    to = self.__nearest_grid(self.__viewer.mouse_ctrl.last_pos()) - \
+                         (spec.pos() + QPoint(int(spec.rect().x() + spec.rect().width() // 2),
+                                              int(spec.rect().y() + spec.rect().height() // 2)))
+                else:
+                    to = self.__viewer.mouse_ctrl.delta
+            self.__transform(to)
+        elif self.__is_started():
+            if not self.moving and spec:
+                self.__viewer.view_selector.select_special(spec, not PnvViewSelector.shift_pressed())
+                # selector hook-back
+            self.moving = False
+            self.__stop_transform()
+
+
+class PnvViewContextFirer(PnvToggleableComponent):
+    def __init__(self, view: 'PnvViewer'):
+        super().__init__()
         self.__viewer = view
         self.__delta = QPoint()
         self.__overpassed = False
         self.__started = False
 
+    def on_disable(self):
+        if self.__started:
+            self.__overpassed = False
+            self.__started = False
+            self.__delta = QPoint()
+
     def update(self):
+        if not self.is_enabled():
+            return
         if self.__viewer.mouse_ctrl.grabbing:
             if not self.__started:
                 self.__started = True
@@ -514,14 +552,15 @@ class PnvViewContextFirer:
                     self.__overpassed = True
         elif self.__started:
             if not self.__overpassed:
-                self.__viewer.context_menu_fire()
+                self.__viewer.context_menu_fire_event()
             self.__overpassed = False
             self.__started = False
             self.__delta = QPoint()
 
 
-class PnvViewSelector:
+class PnvViewSelector(PnvToggleableComponent):
     def __init__(self, view: 'PnvViewer'):
+        super().__init__()
         self.__viewer = view
         self.__start_pos = None
         self.__selection_obj: Union[QGraphicsRectItem, None] = None
@@ -593,7 +632,14 @@ class PnvViewSelector:
         clicked = clicked if isinstance(clicked, (PnvQGPlaceItem, PnvQGTransitionItem)) else None
         return clicked
 
+    def on_disable(self):
+        if self.__selection_obj is not None:
+            self.__finish_selection()
+        self.deselect_all()
+
     def update(self):
+        if not self.is_enabled():
+            return
         if self.__viewer.mouse_ctrl.holding and not self.__viewer.view_items_transformer.moving:
             if self.__selection_obj is None:
                 item = self.is_clicked_item(self.__viewer.mouse_ctrl.last_pos())
@@ -608,11 +654,42 @@ class PnvViewSelector:
             self.__finish_selection()
 
 
+class LockButton(QPushButton):
+    def __init__(self, parent: 'PnvViewer'):
+        QPushButton.__init__(self, parent)
+        self.__padding = 5
+        self.__edit_mode = True
+        self.set_edit_mode(True)
+        self.resize(self.sizeHint().width(), self.sizeHint().height())
+
+    def is_edit_mode(self):
+        return self.__edit_mode
+
+    def set_edit_mode(self, val: bool):
+        if val:
+            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
+            self.setToolTip('Режим: редактирование')
+        else:
+            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
+            self.setToolTip('Режим: просмотр')
+        self.__edit_mode = val
+
+    def update_pos(self):
+        x = self.parent().rect().width() - self.width() - self.__padding
+        y = self.__padding
+        self.setGeometry(x, y, self.width(), self.height())
+
+    def mousePressEvent(self, e: Optional[QtGui.QMouseEvent]) -> None:
+        self.set_edit_mode(not self.__edit_mode)
+        p: 'PnvViewer' = self.parent()
+        p.view_mode_change_event(self.__edit_mode)
+
+
 class PnvViewer(QGraphicsView):
     def __init__(self, *args, **kwargs):
         self.drawer: PnvDrawer = kwargs['drawer'] if 'drawer' in kwargs else None
         del kwargs['drawer']
-        super(QGraphicsView, self).__init__(*args, *kwargs)  # Universal constructor bypass
+        QGraphicsView.__init__(self, *args, *kwargs)  # Universal constructor bypass
         # scale module
         self.grid_distance = 100
         self.bg_brush = Qt.QBrush(Qt.QColor(0xdadada))
@@ -635,6 +712,7 @@ class PnvViewer(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
         self.horizontalScrollBar().setDisabled(True)
         self.verticalScrollBar().setDisabled(True)
+        self.btn = LockButton(self)
 
     def wheelEvent(self, e: Optional[QtGui.QWheelEvent]) -> None:
         self.view_scaler.wheel_event(e)
@@ -663,7 +741,11 @@ class PnvViewer(QGraphicsView):
         self.view_context_fire.update()
         super().mouseMoveEvent(e)
 
-    def context_menu_fire(self):
+    def resizeEvent(self, event: Optional[QtGui.QResizeEvent]) -> None:
+        self.btn.update_pos()
+        super().resizeEvent(event)
+
+    def context_menu_fire_event(self):
         clicked = self.scene().itemAt(self.mouse_ctrl.last_pos(), self.viewportTransform())
         clicked = clicked if isinstance(clicked, (PnvQGPlaceItem, PnvQGTransitionItem)) else None
         if clicked:
@@ -690,6 +772,15 @@ class PnvViewer(QGraphicsView):
                             '&Объединить в подсеть', self.enclose_selected)
             cmenu.exec(pos)
 
+    def view_mode_change_event(self, edit_mode: bool):
+        self.view_context_fire.set_enabled(edit_mode)
+        self.view_selector.set_enabled(edit_mode)
+        self.view_items_transformer.set_enabled(edit_mode)
+        for item in self.items():
+            if isinstance(item, (PnvQGTransitionItem, PnvQGPlaceItem)):
+                item.set_interactive(edit_mode)
+        self.viewport().update()
+
     def enclose_selected(self):
         selected = set(self.view_selector.selected_items)
         self.view_selector.deselect_all()
@@ -703,6 +794,8 @@ class PnvViewer(QGraphicsView):
 
     def drawBackground(self, painter: Optional[QtGui.QPainter], rect: QtCore.QRectF) -> None:
         painter.fillRect(rect, self.bg_brush)
+        if not self.btn.is_edit_mode():
+            return
         painter.setPen(self.bg_grid_pen)
         # grid draw
         ix, ix0 = int(rect.x()), int(rect.x() + rect.width())
@@ -715,6 +808,12 @@ class PnvViewer(QGraphicsView):
             painter.drawLine(Qt.QLineF(xt, rect.y(), xt, rect.y() + rect.height()))
         for yt in range(y, y0 + 1, self.grid_distance):
             painter.drawLine(Qt.QLineF(rect.x(), yt, rect.x() + rect.width(), yt))
+
+    # def drawForeground(self, painter: Optional[QtGui.QPainter], rect: QtCore.QRectF) -> None:
+    #     painter.setPen(self.bg_grid_pen)
+    #     lp = self.mouse_ctrl.last_pos()
+    #     if lp:
+    #         painter.drawEllipse(QtCore.QRectF(lp.x() - 10, lp.y() - 10, 20, 20))
 
     def inject_all_positions(self):
         for obj in self.items():

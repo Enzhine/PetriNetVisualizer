@@ -5,7 +5,7 @@ from PyQt5.QtCore import QRectF
 from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsSceneContextMenuEvent, \
     QGraphicsSceneHoverEvent, QStyleOptionGraphicsItem, QWidget, QGraphicsRectItem, QMenu, QStyle, \
-    QGraphicsLineItem
+    QGraphicsLineItem, QGraphicsItem
 import math
 import numpy as np
 from pm4py import PetriNet
@@ -48,8 +48,10 @@ class PetriNetBind:
         self.__petri_net_obj = obj
 
 
-class HoverSelectable:
+class PnvInteractive:
     def __init__(self):
+        self.__interactive = True
+        self.set_interactive(True)
         # hovered props
         self.pnv_hover_pen: Union[QtGui.QPen, None] = None
         self.pnv_hover_brush: Union[QtGui.QBrush, None] = None
@@ -58,6 +60,15 @@ class HoverSelectable:
         self.pnv_selected_pen: Union[QtGui.QPen, None] = None
         self.pnv_selected_brush: Union[QtGui.QBrush, None] = None
         self.pnv_is_selected: bool = False
+
+    def is_interactive(self):
+        return self.__interactive
+
+    def set_interactive(self, val: bool):
+        self.__interactive = val
+        if not isinstance(self, QGraphicsItem):
+            return
+        self.setAcceptHoverEvents(val)
 
     def set_hovered_pen(self, pen: QtGui.QPen):
         self.pnv_hover_pen = pen
@@ -105,13 +116,12 @@ class HoverSelectable:
         self.manual_update()
 
 
-class PnvQGPlaceItem(QGraphicsEllipseItem, HoverSelectable, PetriNetBind, Markable):
+class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Markable):
     def __init__(self, *args, **kwargs):
-        super(PetriNetBind, self).__init__()
-        super(QGraphicsEllipseItem, self).__init__(*args, **kwargs)  # Universal constructor bypass
-        self.setAcceptHoverEvents(True)
-        super(HoverSelectable, self).__init__()
-        super(Markable, self).__init__()
+        PetriNetBind.__init__(self)
+        QGraphicsEllipseItem.__init__(self, *args, **kwargs)  # Universal constructor bypass
+        PnvInteractive.__init__(self)
+        Markable.__init__(self)
         #
         self.setPen(QtGui.QPen(QtGui.QColor('black'), 3))
         self.setBrush(QtGui.QBrush(QtGui.QColor('white')))
@@ -226,13 +236,12 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, HoverSelectable, PetriNetBind, Markab
     #     super(PnvQGPlaceItem, self).contextMenuEvent(event)
 
 
-class PnvQGTransitionItem(QGraphicsRectItem, HoverSelectable, PetriNetBind):
+class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind):
 
     def __init__(self, *args, **kwargs):
-        super(PetriNetBind, self).__init__()
-        super(QGraphicsRectItem, self).__init__(*args, *kwargs)  # Universal constructor bypass
-        self.setAcceptHoverEvents(True)
-        super(HoverSelectable, self).__init__()
+        PetriNetBind.__init__(self)
+        QGraphicsRectItem.__init__(self, *args, *kwargs)  # Universal constructor bypass
+        PnvInteractive.__init__(self)
         # arrows holder
         self.setPen(QtGui.QPen(QtGui.QColor('black'), 3))
         self.setBrush(QtGui.QBrush(QtGui.QColor('white')))
@@ -278,6 +287,8 @@ class PnvQGTransitionItem(QGraphicsRectItem, HoverSelectable, PetriNetBind):
         super().petri_net_bind(obj)
 
     def contextMenuEvent(self, event: Optional[QGraphicsSceneContextMenuEvent]) -> None:
+        if not self.is_interactive():
+            return
         if self.petri_net_bound():
             trans: PetriNet.Transition = self.petri_net_bound()
             cmenu = QMenu(self.scene().parent())
@@ -308,7 +319,7 @@ class PnvQGArrowItem(QGraphicsLineItem):
         self._y1: float = 0
         self._x2: float = 0
         self._y2: float = 0
-        super(QGraphicsLineItem, self).__init__(line)
+        QGraphicsLineItem.__init__(self, line)
         self.setPen(QtGui.QPen(QtGui.QColor('black'), 3))
         self.dead = False
 
