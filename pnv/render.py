@@ -132,6 +132,62 @@ class PnvDrawer:
             lay = ((gen[0], gen[1]), (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
             PnvDrawer.inject_layout(local_mapper_re[i], lay)
 
+    def connect_arc(self, from_: Union[PnvQGTransitionItem, PnvQGPlaceItem], to: Union[PnvQGTransitionItem, PnvQGPlaceItem]):
+        # net arc
+        arc = PetriNet.Arc(from_.petri_net_bound(), to.petri_net_bound())
+        self.net.arcs.add(arc)
+        arc.source.out_arcs.add(arc)
+        arc.target.in_arcs.add(arc)
+        # gui arc
+        arrow = self.draw_arc(from_.petri_net_bound(), to.petri_net_bound())
+        from_.arrows().add(arrow)
+        to.arrows().add(arrow)
+
+    def disconnect_arc(self, one: Union[PnvQGTransitionItem, PnvQGPlaceItem], two: Union[PnvQGTransitionItem, PnvQGPlaceItem]):
+        to = None
+        from_ = None
+        for arrow in one.arrows():
+            if arrow.to is one and arrow.from_ is two:
+                to = one
+                from_ = two
+                break
+            elif arrow.to is two and arrow.from_ is one:
+                to = two
+                from_ = one
+                break
+        if to is None or from_ is None:
+            raise Exception('Unable to disconnect components!')
+        target_arc: PetriNet.Arc = None
+        for arc in from_.petri_net_bound().out_arcs:
+            if arc.target is to.petri_net_bound():
+                target_arc = arc
+                break
+        if target_arc is None:
+            raise Exception('Somehow, connected components have no arc!')
+        # removing net
+        target_arc.source.out_arcs.remove(target_arc)
+        target_arc.target.in_arcs.remove(target_arc)
+        self.net.arcs.remove(target_arc)
+        # remove gui
+        arrow.from_.arrows().remove(arrow)
+        arrow.to.arrows().remove(arrow)
+        arrow.hide()
+        self.scene.removeItem(arrow)
+
+    def place_create(self, pos: QtCore.QPointF):
+        p = PetriNet.Place(f'p{str(time.time())}')
+        lay = ((pos.x(), pos.y()),(PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
+        PnvDrawer.inject_layout(p, lay)
+        self.mapper[p] = self.draw_place(p)
+        self.net.places.add(p)
+
+    def transition_create(self, pos: QtCore.QPointF):
+        t = PetriNet.Transition(f'p{str(time.time())}')
+        lay = ((pos.x(), pos.y()),(PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
+        PnvDrawer.inject_layout(t, lay)
+        self.mapper[t] = self.draw_transition(t)
+        self.net.transitions.add(t)
+
     def subnet_unwrap(self, trans_obj: PnvQGTransitionItem):
         extr: PetriNet.Transition = trans_obj.petri_net_bound()
 
@@ -226,13 +282,13 @@ class PnvDrawer:
         for arrow in total_arrows:
             if not (arrow.to in objs):
                 outer_to_objs.add(arrow.to)
-                boundary_transitions = boundary_transitions and isinstance(arrow.from_, PnvQGTransitionItem)
+                boundary_transitions = boundary_transitions and isinstance(arrow.from_, PnvQGTransitionItem) and not isinstance(arrow.from_.petri_net_bound(), ExtendedTransition)
             elif not (arrow.from_ in objs):
                 outer_from_objs.add(arrow.from_)
-                boundary_transitions = boundary_transitions and isinstance(arrow.to, PnvQGTransitionItem)
+                boundary_transitions = boundary_transitions and isinstance(arrow.to, PnvQGTransitionItem) and not isinstance(arrow.to.petri_net_bound(), ExtendedTransition)
         # boundary verification
         if not boundary_transitions:
-            raise pnv.importer.epnml.EPNMLException('Boundary objects must be transitions!')
+            raise pnv.importer.epnml.EPNMLException('Boundary objects must be simple transitions!')
 
         # wrappability verification-2
         if len(outer_to_objs) + len(outer_from_objs) == 0:
@@ -477,6 +533,7 @@ class PnvItemsTransformer(PnvToggleableComponent):
     def __start_transform(self):
         self.__start_pos = self.__viewer.mouse_ctrl.last_pos()
         QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.SizeAllCursor)
+        self.__viewer.edited_status = True
 
     def __stop_transform(self):
         self.__start_pos = None
@@ -620,7 +677,7 @@ class PnvViewSelector(PnvToggleableComponent):
             self.selected_special = None
         self.selected_items.clear()
 
-    def select_special(self, clicked, remove_previous):
+    def select_special(self, clicked: Union[PnvQGTransitionItem, PnvQGPlaceItem], remove_previous: bool):
         if remove_previous:
             self.deselect_all()
         self.selected_items.add(clicked)
@@ -644,7 +701,10 @@ class PnvViewSelector(PnvToggleableComponent):
             if self.__selection_obj is None:
                 item = self.is_clicked_item(self.__viewer.mouse_ctrl.last_pos())
                 if item:
-                    self.select_special(item, not (item in self.selected_items))
+                    if PnvViewSelector.shift_pressed():
+                        self.select_special(item, False)
+                    else:
+                        self.select_special(item, not (item in self.selected_items))
                     # item transformer hook
                     return
                 self.__start_selection()
@@ -752,25 +812,54 @@ class PnvViewer(QGraphicsView):
             return
         pos = self.mapToGlobal(self.mapFromScene(self.mouse_ctrl.last_pos()))
         cmenu = QMenu(self.scene().parent())
-        if len(self.view_selector.selected_items) == 1 or False:
+        if len(self.view_selector.selected_items) == 1:
             return  # skip all selected or single one
         elif len(self.view_selector.selected_items) == 0:
             cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_TitleBarUnshadeButton),
-                            '&Добавить позицию')
+                            '&Добавить позицию', self.place_create)
             cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_TitleBarUnshadeButton),
-                            '&Добавить переход')
+                            '&Добавить переход', self.transition_create)
             cmenu.exec(pos)
         elif len(self.view_selector.selected_items) == 2:
-            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay),
-                            '&Соединить')
-            cmenu.addSeparator()
-            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown),
-                            '&Объединить в подсеть', self.enclose_selected)
+            first, second, *_ = self.view_selector.selected_items
+
+            # special verification
+            if not (first is self.view_selector.selected_special) and not (second is self.view_selector.selected_special):
+                return
+            # bi verification
+            if type(first) == type(second):
+                return
+
+            first: Union[PnvQGTransitionItem, PnvQGPlaceItem]
+            second: Union[PnvQGTransitionItem, PnvQGPlaceItem]
+            connected = any(arc.target is second.petri_net_bound() for arc in first.petri_net_bound().out_arcs) or \
+                        any(arc.source is second.petri_net_bound() for arc in first.petri_net_bound().in_arcs)
+            if connected:
+                cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MediaPause),
+                                '&Отсоединить', self.arc_destroy)
+            else:
+                cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay),
+                                '&Соединить', self.arc_connect)
             cmenu.exec(pos)
         else:
             cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown),
                             '&Объединить в подсеть', self.enclose_selected)
             cmenu.exec(pos)
+
+    def place_create(self):
+        self.drawer.place_create(self.mouse_ctrl.last_pos())
+
+    def transition_create(self):
+        self.drawer.transition_create(self.mouse_ctrl.last_pos())
+
+    def arc_destroy(self):
+        one, two = self.view_selector.selected_items
+        self.drawer.disconnect_arc(one, two)
+
+    def arc_connect(self):
+        to = self.view_selector.selected_special
+        from_, *_ = set(self.view_selector.selected_items) - {to}
+        self.drawer.connect_arc(from_, to)
 
     def view_mode_change_event(self, edit_mode: bool):
         self.view_context_fire.set_enabled(edit_mode)

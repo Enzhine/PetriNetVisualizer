@@ -36,6 +36,10 @@ class MethodsIO:
     def save_as_pnml(g: GraphData, file_path: str):
         pm4py.write_pnml(g.petri_net, g.init_marks, g.fin_marks, file_path)
 
+    @staticmethod
+    def save_as_epnml(g: GraphData, file_path: str):
+        epnml.export_net(g.petri_net, g.init_marks, file_path, g.fin_marks)
+
 
 class PnvMainWindow(QMainWindow):
     WINDOW_ICON = None
@@ -168,7 +172,8 @@ class PnvMainWindow(QMainWindow):
             # apply changes
             if g.viewer.edited_status:
                 g.viewer.inject_all_positions()
-            MethodsIO.save_as_pnml(g, g.path)
+                g.viewer.edited_status = False
+            MethodsIO.save_as_epnml(g, g.path)
         self.tabs.removeTab(idx)
         self.graphs.remove(g)
         for g in self.graphs:
@@ -195,7 +200,7 @@ class PnvMainWindow(QMainWindow):
             return None
 
     def get_new_file_path(self):
-        return QFileDialog.getSaveFileName(self, filter="Petri-net file (*.pnml)")[0]
+        return QFileDialog.getSaveFileName(self, filter="Extended Petri-net file (*.epnml)")[0]
 
     def load_petri_net_file(self, path: str):
         pn = im = fm = None
@@ -276,7 +281,8 @@ class PnvMainWindow(QMainWindow):
             # apply changes
             if g.viewer.edited_status:
                 g.viewer.inject_all_positions()
-            MethodsIO.save_as_pnml(g, g.path)
+                g.viewer.edited_status = False
+            MethodsIO.save_as_epnml(g, g.path)
 
     @QtCore.pyqtSlot()
     def save_file_as(self):
@@ -291,7 +297,8 @@ class PnvMainWindow(QMainWindow):
             g = self.find_graph(idx)
             if g.viewer.edited_status:
                 g.viewer.inject_all_positions()
-            MethodsIO.save_as_pnml(g, path)
+                g.viewer.edited_status = False
+            MethodsIO.save_as_epnml(g, path)
             g.path = path
             g.viewer.edited_status = False
             g.drawer.edited_status = False

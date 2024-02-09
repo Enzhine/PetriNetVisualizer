@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <pnml>
-  <net id="imported_1705961577.5475488" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
+  <net id="imported_1707511586.932271" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
     <name>
-      <text>imported_1705961577.5475488</text>
+      <text>imported_1707511586.932271</text>
     </name>
     <page id="n0">
       <place id="p1">
@@ -13,54 +13,129 @@
           <text>1</text>
         </initialMarking>
         <graphics>
-          <position x="99.843478152883" y="-200.5913468404418"/>
-          <dimension x="40" y="40"/>
+          <position x="200.0" y="-100.0"/>
+          <dimension x="40.0" y="40.0"/>
         </graphics>
       </place>
-      <place id="p2">
+      <place id="p1707509694.379825">
         <name>
-          <text>p2</text>
+          <text>p1707509694.379825</text>
         </name>
         <graphics>
-          <position x="-100.06812748756636" y="-199.4836852922366"/>
-          <dimension x="40" y="40"/>
+          <position x="-400.0" y="-100.0"/>
+          <dimension x="40.0" y="40.0"/>
         </graphics>
       </place>
-      <transition id="g1">
+      <transition id="g_1707511762.9978404">
         <name>
-          <text>g1</text>
+          <text>wrapped</text>
         </name>
         <graphics>
-          <position x="2.6243488087624485" y="-199.88006904645107"/>
+          <position x="-100.0" y="-125.0"/>
           <dimension x="40" y="40"/>
         </graphics>
-        <page id="n1">
+        <page id="n0">
           <place id="p4">
             <name>
               <text>p4</text>
             </name>
-            <initialMarking>
-              <text>1</text>
-            </initialMarking>
+            <graphics>
+              <position x="0.0" y="-100.0"/>
+              <dimension x="40.0" y="40.0"/>
+            </graphics>
           </place>
+          <place id="p2">
+            <name>
+              <text>p2</text>
+            </name>
+            <graphics>
+              <position x="-200.0" y="-100.0"/>
+              <dimension x="40.0" y="40.0"/>
+            </graphics>
+          </place>
+          <transition id="p1707509691.180038">
+            <name>
+              <text>p1707509691.180038</text>
+            </name>
+            <graphics>
+              <position x="-300.0" y="-100.0"/>
+              <dimension x="40.0" y="40.0"/>
+            </graphics>
+          </transition>
           <transition id="t3">
             <name>
               <text>t3</text>
             </name>
+            <graphics>
+              <position x="100.0" y="-100.0"/>
+              <dimension x="40.0" y="40.0"/>
+            </graphics>
           </transition>
-          <transition id="t4">
+          <transition id="g_1707511722.2796094">
             <name>
-              <text>t4</text>
+              <text>wrapped</text>
             </name>
+            <graphics>
+              <position x="-100.0" y="-150.0"/>
+              <dimension x="40" y="40"/>
+            </graphics>
+            <page id="n0">
+              <place id="p1707511635.5929847">
+                <name>
+                  <text>p1707511635.5929847</text>
+                </name>
+                <graphics>
+                  <position x="-100.0" y="-200.0"/>
+                  <dimension x="40" y="40"/>
+                </graphics>
+              </place>
+              <transition id="p1707509670.758634">
+                <name>
+                  <text>p1707509670.758634</text>
+                </name>
+                <graphics>
+                  <position x="-100.0" y="-300.0"/>
+                  <dimension x="40.0" y="40.0"/>
+                </graphics>
+              </transition>
+              <transition id="p1707509672.3047385">
+                <name>
+                  <text>p1707509672.3047385</text>
+                </name>
+                <graphics>
+                  <position x="-100.0" y="0.0"/>
+                  <dimension x="40.0" y="40.0"/>
+                </graphics>
+              </transition>
+              <transition id="t4">
+                <name>
+                  <text>t4</text>
+                </name>
+                <graphics>
+                  <position x="-100.0" y="-100.0"/>
+                  <dimension x="40.0" y="40.0"/>
+                </graphics>
+              </transition>
+              <arc id="2700546025280" source="p4" target="p1707509670.758634"/>
+              <arc id="2700546653248" source="p1707509670.758634" target="p1707511635.5929847"/>
+              <arc id="2700546025568" source="p4" target="p1707509672.3047385"/>
+              <arc id="2700546025856" source="p1707509670.758634" target="p2"/>
+              <arc id="2700546653344" source="p1707511635.5929847" target="t4"/>
+              <arc id="2700546025952" source="p1707509672.3047385" target="p2"/>
+              <arc id="2700546025664" source="p4" target="t4"/>
+              <arc id="2700546025376" source="t4" target="p2"/>
+            </page>
           </transition>
-          <arc id="2090410290144" source="p4" target="t4"/>
-          <arc id="2090410290145" source="t3" target="p4"/>
-          <arc id="2090410290146" source="t4" target="p2"/>
-          <arc id="2090410290146" source="p1" target="t3"/>
+          <arc id="2700546653872" source="p2" target="p1707509691.180038"/>
+          <arc id="2700546653680" source="p4" target="g_1707511722.2796094"/>
+          <arc id="2700546654064" source="p1707509691.180038" target="p1707509694.379825"/>
+          <arc id="2700546653584" source="g_1707511722.2796094" target="p2"/>
+          <arc id="2700546653104" source="t3" target="p4"/>
+          <arc id="2700546653968" source="p1" target="t3"/>
         </page>
       </transition>
-      <arc id="2090410290240" source="p1" target="g1"/>
-      <arc id="2090410290144" source="g1" target="p2"/>
+      <arc id="2700546645424" source="p1" target="g_1707511762.9978404"/>
+      <arc id="2700546645520" source="g_1707511762.9978404" target="p1707509694.379825"/>
     </page>
   </net>
 </pnml>

@@ -24,10 +24,10 @@ class ExtendedTransition(PetriNet.Transition):
         return self.__inner_net
 
     def __get_init_marks(self):
-        return self.init_marking
+        return self.__init_marks
 
     def __get_final_marks(self):
-        return self.final_marking
+        return self.__final_marks
 
     def inject_net(self, inner_net=None, init_marks=None, final_marks=None):
         self.__inner_net = inner_net
@@ -240,11 +240,11 @@ def import_net_from_xml_object(nett, parameters, top_net_data=None):
                 inhibic = (arc_source in places_dict) and (arc_target in trans_dict)
                 if top_net_data is not None:
                     inhibic = inhibic or ((arc_source in top_net_data[0]) and (arc_target in trans_dict)) or \
-                          (arc_source in places_dict) and (arc_target in top_net_data[1])
+                              (arc_source in places_dict) and (arc_target in top_net_data[1])
                 rever = (arc_target in places_dict) and (arc_source in trans_dict)
                 if top_net_data is not None:
                     rever = rever or ((arc_target in top_net_data[0]) and (arc_source in trans_dict)) or \
-                          (arc_target in places_dict) and (arc_source in top_net_data[1])
+                            (arc_target in places_dict) and (arc_source in top_net_data[1])
 
                 if inhibic:
                     if arc_type == petri_properties.INHIBITOR_ARC and not isinstance(net, InhibitorNet):
@@ -311,3 +311,173 @@ def import_net_from_xml_object(nett, parameters, top_net_data=None):
             net.properties[petri_properties.VARIABLES].append({"type": variable_type, "name": variable_name})
 
     return net, marking, fmarking
+
+
+def export_petri_tree(petrinet, marking, final_marking=None, parameters=None, top_net_data=None):
+    if parameters is None:
+        parameters = {}
+
+    if final_marking is None:
+        final_marking = Marking()
+
+    if marking is None:
+        marking = Marking()
+
+    if top_net_data is not None:
+        net = top_net_data[0]
+        transitions_map = top_net_data[1]
+        places_map = top_net_data[2]
+    else:
+        places_map = {}
+        transitions_map = {}
+        root = etree.Element("pnml")
+        net = etree.SubElement(root, "net")
+        net.set("id", petrinet.name)
+        netname = etree.SubElement(net, "name")
+        netnametext = etree.SubElement(netname, "text")
+        netnametext.text = petrinet.name
+        net.set("type", "http://www.pnml.org/version-2009/grammar/pnmlcoremodel")
+    page = etree.SubElement(net, "page")
+    page.set("id", "n0")
+    for place in petrinet.places:
+        places_map[place] = place.name
+        pl = etree.SubElement(page, "place")
+        pl.set("id", place.name)
+        pl_name = etree.SubElement(pl, "name")
+        pl_name_text = etree.SubElement(pl_name, "text")
+        pl_name_text.text = place.properties[
+            constants.PLACE_NAME_TAG] if constants.PLACE_NAME_TAG in place.properties else place.name
+        if place in marking:
+            pl_initial_marking = etree.SubElement(pl, "initialMarking")
+            pl_initial_marking_text = etree.SubElement(pl_initial_marking, "text")
+            pl_initial_marking_text.text = str(marking[place])
+        if constants.LAYOUT_INFORMATION_PETRI in place.properties:
+            graphics = etree.SubElement(pl, "graphics")
+            position = etree.SubElement(graphics, "position")
+            position.set("x", str(place.properties[constants.LAYOUT_INFORMATION_PETRI][0][0]))
+            position.set("y", str(place.properties[constants.LAYOUT_INFORMATION_PETRI][0][1]))
+            dimension = etree.SubElement(graphics, "dimension")
+            dimension.set("x", str(place.properties[constants.LAYOUT_INFORMATION_PETRI][1][0]))
+            dimension.set("y", str(place.properties[constants.LAYOUT_INFORMATION_PETRI][1][1]))
+    extended = []
+    for transition in petrinet.transitions:
+        transitions_map[transition] = transition.name
+        trans = etree.SubElement(page, "transition")
+        trans.set("id", transition.name)
+        trans_name = etree.SubElement(trans, "name")
+        trans_text = etree.SubElement(trans_name, "text")
+        if constants.LAYOUT_INFORMATION_PETRI in transition.properties:
+            graphics = etree.SubElement(trans, "graphics")
+            position = etree.SubElement(graphics, "position")
+            position.set("x", str(transition.properties[constants.LAYOUT_INFORMATION_PETRI][0][0]))
+            position.set("y", str(transition.properties[constants.LAYOUT_INFORMATION_PETRI][0][1]))
+            dimension = etree.SubElement(graphics, "dimension")
+            dimension.set("x", str(transition.properties[constants.LAYOUT_INFORMATION_PETRI][1][0]))
+            dimension.set("y", str(transition.properties[constants.LAYOUT_INFORMATION_PETRI][1][1]))
+        if transition.label is not None:
+            trans_text.text = transition.label
+        else:
+            trans_text.text = transition.name
+        # specific for data Petri nets
+        if petri_properties.TRANS_GUARD in transition.properties:
+            trans.set(petri_properties.TRANS_GUARD, transition.properties[petri_properties.TRANS_GUARD])
+        if petri_properties.READ_VARIABLE in transition.properties:
+            read_variables = transition.properties[petri_properties.READ_VARIABLE]
+            for rv in read_variables:
+                rv_el = etree.SubElement(trans, petri_properties.READ_VARIABLE)
+                rv_el.text = rv
+        if petri_properties.WRITE_VARIABLE in transition.properties:
+            write_variables = transition.properties[petri_properties.WRITE_VARIABLE]
+            for wv in write_variables:
+                wv_el = etree.SubElement(trans, petri_properties.WRITE_VARIABLE)
+                wv_el.text = wv
+
+        if isinstance(transition, ExtendedTransition):
+            extended.append((trans, transition))
+    for arc in petrinet.arcs:
+        arc_el = etree.SubElement(page, "arc")
+        arc_el.set("id", str(hash(arc)))
+        if type(arc.source) is PetriNet.Place:
+            arc_el.set("source", str(places_map[arc.source]))
+            arc_el.set("target", str(transitions_map[arc.target]))
+        else:
+            arc_el.set("source", str(transitions_map[arc.source]))
+            arc_el.set("target", str(places_map[arc.target]))
+
+        if arc.weight > 1:
+            inscription = etree.SubElement(arc_el, "inscription")
+            arc_weight = etree.SubElement(inscription, "text")
+            arc_weight.text = str(arc.weight)
+
+        if isinstance(arc, ResetNet.ResetArc):
+            element = etree.SubElement(arc_el, petri_properties.ARCTYPE)
+            element_text = etree.SubElement(element, "text")
+            element_text.text = petri_properties.RESET_ARC
+        elif isinstance(arc, InhibitorNet.InhibitorArc):
+            element = etree.SubElement(arc_el, petri_properties.ARCTYPE)
+            element_text = etree.SubElement(element, "text")
+            element_text.text = petri_properties.INHIBITOR_ARC
+
+        for prop_key in arc.properties:
+            if prop_key != petri_properties.ARCTYPE:
+                element = etree.SubElement(arc_el, prop_key)
+                element_text = etree.SubElement(element, "text")
+                element_text.text = str(arc.properties[prop_key])
+
+    # export inner net
+    for xml_obj, extr in extended:
+        export_petri_tree(extr.inner_net, extr.init_marking, extr.final_marking, None, (xml_obj, transitions_map, places_map))
+
+    if len(final_marking) > 0:
+        finalmarkings = etree.SubElement(net, "finalmarkings")
+        marking = etree.SubElement(finalmarkings, "marking")
+
+        for place in final_marking:
+            placem = etree.SubElement(marking, "place")
+            placem.set("idref", place.name)
+            placem_text = etree.SubElement(placem, "text")
+            placem_text.text = str(final_marking[place])
+
+    # specific for data Petri nets
+    if petri_properties.VARIABLES in petrinet.properties:
+        variables = etree.SubElement(net, "variables")
+        for prop in petrinet.properties[petri_properties.VARIABLES]:
+            variable = etree.SubElement(variables, "variable")
+            variable.set("type", prop["type"])
+            variable_name = etree.SubElement(variable, "name")
+            variable_name.text = prop["name"]
+
+    if top_net_data is not None:
+        tree = net
+    else:
+        tree = etree.ElementTree(root)
+
+    return tree
+
+
+def export_petri_as_string(petrinet, marking, final_marking=None, parameters=None):
+    if parameters is None:
+        parameters = {}
+
+    encoding = exec_utils.get_param_value(Parameters.ENCODING, parameters, constants.DEFAULT_ENCODING)
+
+    # gets the XML tree
+    tree = export_petri_tree(petrinet, marking, final_marking=final_marking)
+
+    # removing default decoding (return binary string as in other parts of the application)
+    return etree.tostring(tree, xml_declaration=True, encoding=encoding)
+
+
+def export_net(petrinet, marking, output_filename, final_marking=None, parameters=None):
+    if parameters is None:
+        parameters = {}
+
+    encoding = exec_utils.get_param_value(Parameters.ENCODING, parameters, constants.DEFAULT_ENCODING)
+
+    # gets the XML tree
+    tree = export_petri_tree(petrinet, marking, final_marking=final_marking)
+
+    # write the tree to a file
+    F = open(output_filename, "wb")
+    tree.write(F, pretty_print=True, xml_declaration=True, encoding=encoding)
+    F.close()
