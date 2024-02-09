@@ -310,6 +310,7 @@ class PnvQGArrowItem(QGraphicsLineItem):
         self._y2: float = 0
         super(QGraphicsLineItem, self).__init__(line)
         self.setPen(QtGui.QPen(QtGui.QColor('black'), 3))
+        self.dead = False
 
     def from_point(self) -> tuple[float, float]:
         return self.from_.rect().x() + self.from_.x(), self.from_.rect().y() + self.from_.y()
@@ -330,8 +331,6 @@ class PnvQGArrowItem(QGraphicsLineItem):
         return self._x2, self._y2
 
     def last_line(self) -> tuple[float, float, float, float]:
-        if self.to is None and self.from_ is None:
-            return self._x1, self._y1, self._x2, self._y2
         # TODO: somehow fix transition arrow
         xy0, s0 = self.from_point(), self.from_sizes()
         xy1, s1 = self.to_point(), self.to_sizes()

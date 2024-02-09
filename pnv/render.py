@@ -164,8 +164,7 @@ class PnvDrawer:
             elif arrow.to is trans_obj:
                 # source is outer
                 arrow.from_.arrows().remove(arrow)
-            arrow.from_ = None
-            arrow.to = None
+            arrow.hide()
             self.scene.removeItem(arrow)  # delete from gui
         # # petri net arcs remove
         for out_arc in extr.out_arcs:
@@ -278,8 +277,7 @@ class PnvDrawer:
             for obj in outer_from_objs:
                 if arrow in obj.arrows():
                     obj.arrows().remove(arrow)
-            arrow.from_ = None
-            arrow.to = None
+            arrow.hide()
             self.scene.removeItem(arrow)
         # # petri net arcs remove
         for arc in arcs:
