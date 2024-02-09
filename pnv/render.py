@@ -4,7 +4,7 @@ from typing import Union, Optional, Tuple
 from PyQt5 import Qt, QtCore, QtGui
 from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsView, QApplication, QMenu, \
-    QStyle, QGraphicsItem
+    QStyle
 from pm4py import PetriNet
 from igraph import Graph
 
@@ -28,19 +28,19 @@ class PnvDrawer:
 
     def draw_place_directly(self, x: int, y: int, r: int) -> PnvQGPlaceItem:
         # custom ellipse init
-        obj = PnvQGPlaceItem(Qt.QRectF(x - r / 2, y - r / 2, r, r))
+        obj = PnvQGPlaceItem(QtCore.QRectF(x - r / 2, y - r / 2, r, r))
         self.scene.addItem(obj)
         return obj
 
     def draw_transition_directly(self, x: int, y: int, w: int, h: int, label: str = None) -> PnvQGTransitionItem:
         # custom rectangle init
-        obj = PnvQGTransitionItem(Qt.QRectF(x - w / 2, y - h / 2, w, h))
+        obj = PnvQGTransitionItem(QtCore.QRectF(x - w / 2, y - h / 2, w, h))
         self.scene.addItem(obj)
         if label:
             text = self.scene.addText(label)
-            w = Qt.QFontMetrics(text.font()).width(label)
-            h = Qt.QFontMetrics(text.font()).height()
-            text.setPos(Qt.QPointF(x - w / 2, y + h))
+            w = QtGui.QFontMetrics(text.font()).width(label)
+            h = QtGui.QFontMetrics(text.font()).height()
+            text.setPos(QtCore.QPointF(x - w / 2, y + h))
             # binding text, but not events
             text.setParentItem(obj)
             text.setAcceptHoverEvents(False)
@@ -164,6 +164,8 @@ class PnvDrawer:
             elif arrow.to is trans_obj:
                 # source is outer
                 arrow.from_.arrows().remove(arrow)
+            arrow.from_ = None
+            arrow.to = None
             self.scene.removeItem(arrow)  # delete from gui
         # # petri net arcs remove
         for out_arc in extr.out_arcs:
@@ -217,6 +219,26 @@ class PnvDrawer:
         if len(objs) <= 1:
             raise pnv.importer.epnml.EPNMLException('Attempt to wrap empty or single-object net!')
 
+        # define outer objs
+        outer_to_objs = set()
+        outer_from_objs = set()
+        total_arrows: set[PnvQGArrowItem] = set().union(*[obj.arrows() for obj in objs])  # all arrows
+        boundary_transitions = True
+        for arrow in total_arrows:
+            if not (arrow.to in objs):
+                outer_to_objs.add(arrow.to)
+                boundary_transitions = boundary_transitions and isinstance(arrow.from_, PnvQGTransitionItem)
+            elif not (arrow.from_ in objs):
+                outer_from_objs.add(arrow.from_)
+                boundary_transitions = boundary_transitions and isinstance(arrow.to, PnvQGTransitionItem)
+        # boundary verification
+        if not boundary_transitions:
+            raise pnv.importer.epnml.EPNMLException('Boundary objects must be transitions!')
+
+        # wrappability verification-2
+        if len(outer_to_objs) + len(outer_from_objs) == 0:
+            raise pnv.importer.epnml.EPNMLException('Attempt to wrap entire net!')
+
         # future transition place
         objs_poses = [PnvDrawer.final_pos(o) for o in objs]
         min_bx = min([p[0] for p in objs_poses])
@@ -224,16 +246,6 @@ class PnvDrawer:
         max_bx = max([p[0] for p in objs_poses])
         max_by = max([p[1] for p in objs_poses])
         objs_center = (min_bx + (max_bx - min_bx) / 2, min_by + (max_by - min_by) / 2)
-
-        # define outer objs
-        outer_to_objs = set()
-        outer_from_objs = set()
-        total_arrows: set[PnvQGArrowItem] = set().union(*[obj.arrows() for obj in objs]) # all arrows
-        for arrow in total_arrows:
-            if not (arrow.to in objs):
-                outer_to_objs.add(arrow.to)
-            elif not (arrow.from_ in objs):
-                outer_from_objs.add(arrow.from_)
 
         # creating wrapped net
         places: set[PetriNet.Place] = set()
@@ -266,6 +278,8 @@ class PnvDrawer:
             for obj in outer_from_objs:
                 if arrow in obj.arrows():
                     obj.arrows().remove(arrow)
+            arrow.from_ = None
+            arrow.to = None
             self.scene.removeItem(arrow)
         # # petri net arcs remove
         for arc in arcs:
