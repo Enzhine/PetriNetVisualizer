@@ -15,7 +15,7 @@ from pnv.importer import epnml
 from pnv.render import PnvViewer, PnvDrawer
 from pnv.utils import PnvMessageBoxes, PnvConfig
 
-CURRENT_VERSION = '1.19-HALF'
+CURRENT_VERSION = '1.19-ALMOST'
 APP_NAME = "Petri Net Visualizer"
 
 
