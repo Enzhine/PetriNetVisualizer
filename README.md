@@ -1,4 +1,4 @@
-# Petri Net Visualizer v1.19-ALMOST
+# Petri Net Visualizer v1.19
 HSE SE 2nd Course Project
 Shamaev Onar Evgenevich
 # About program
@@ -11,4 +11,4 @@ Should be able to view any *.pnml file.
 - open/save any *.pnml/*.epnml file
 - open multiple files
 - select/deselect and move places/transitions
-- add/connect places/transitions
+- add/remove/connect places/transitions
