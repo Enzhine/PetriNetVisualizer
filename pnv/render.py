@@ -49,6 +49,7 @@ class PnvDrawer:
     def draw_place(self, p: PetriNet.Place) -> PnvQGPlaceItem:
         pos, shape = self.layout(p)
         obj = self.draw_place_directly(*pos, shape[0])
+        obj.drawer = self
         obj.petri_net_bind(p)
         return obj
 
@@ -176,17 +177,61 @@ class PnvDrawer:
 
     def place_create(self, pos: QtCore.QPointF):
         p = PetriNet.Place(f'p{str(time.time())}')
-        lay = ((pos.x(), pos.y()),(PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
+        lay = ((pos.x(), pos.y()), (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
         PnvDrawer.inject_layout(p, lay)
         self.mapper[p] = self.draw_place(p)
         self.net.places.add(p)
 
     def transition_create(self, pos: QtCore.QPointF):
         t = PetriNet.Transition(f'p{str(time.time())}')
-        lay = ((pos.x(), pos.y()),(PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
+        lay = ((pos.x(), pos.y()), (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
         PnvDrawer.inject_layout(t, lay)
         self.mapper[t] = self.draw_transition(t)
         self.net.transitions.add(t)
+
+    def place_remove(self, item: PnvQGPlaceItem):
+        # net remove
+        bound = item.petri_net_bound()
+        for in_arc in bound.in_arcs:
+            in_arc.source.out_arcs.remove(in_arc)
+            self.net.arcs.remove(in_arc)
+        for out_arc in bound.out_arcs:
+            out_arc.target.in_arcs.remove(out_arc)
+            self.net.arcs.remove(out_arc)
+        self.net.places.remove(bound)
+        # gui remove
+        for arrow in item.arrows():
+            if arrow.from_ is self:
+                arrow.to.arrows().remove(arrow)
+            elif arrow.to is self:
+                arrow.from_.arrows().remove(arrow)
+            arrow.hide()
+            self.scene.removeItem(arrow)
+        item.hide()
+        self.scene.removeItem(item)
+        self.scene.update()
+
+    def transition_remove(self, item: PnvQGTransitionItem):
+        # net remove
+        bound = item.petri_net_bound()
+        for in_arc in bound.in_arcs:
+            in_arc.source.out_arcs.remove(in_arc)
+            self.net.arcs.remove(in_arc)
+        for out_arc in bound.out_arcs:
+            out_arc.target.in_arcs.remove(out_arc)
+            self.net.arcs.remove(out_arc)
+        self.net.transitions.remove(bound)
+        # gui remove
+        for arrow in item.arrows():
+            if arrow.from_ is self:
+                arrow.to.arrows().remove(arrow)
+            elif arrow.to is self:
+                arrow.from_.arrows().remove(arrow)
+            arrow.hide()
+            self.scene.removeItem(arrow)
+        item.hide()
+        self.scene.removeItem(item)
+        self.scene.update()
 
     def subnet_unwrap(self, trans_obj: PnvQGTransitionItem):
         extr: PetriNet.Transition = trans_obj.petri_net_bound()
@@ -773,6 +818,7 @@ class PnvViewer(QGraphicsView):
         self.horizontalScrollBar().setDisabled(True)
         self.verticalScrollBar().setDisabled(True)
         self.btn = LockButton(self)
+        self.__context_blocked = False
 
     def wheelEvent(self, e: Optional[QtGui.QWheelEvent]) -> None:
         self.view_scaler.wheel_event(e)
@@ -819,32 +865,41 @@ class PnvViewer(QGraphicsView):
                             '&Добавить позицию', self.place_create)
             cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_TitleBarUnshadeButton),
                             '&Добавить переход', self.transition_create)
-            cmenu.exec(pos)
         elif len(self.view_selector.selected_items) == 2:
             first, second, *_ = self.view_selector.selected_items
-
-            # special verification
-            if not (first is self.view_selector.selected_special) and not (second is self.view_selector.selected_special):
-                return
             # bi verification
             if type(first) == type(second):
                 return
-
             first: Union[PnvQGTransitionItem, PnvQGPlaceItem]
             second: Union[PnvQGTransitionItem, PnvQGPlaceItem]
             connected = any(arc.target is second.petri_net_bound() for arc in first.petri_net_bound().out_arcs) or \
                         any(arc.source is second.petri_net_bound() for arc in first.petri_net_bound().in_arcs)
+
             if connected:
                 cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MediaPause),
                                 '&Отсоединить', self.arc_destroy)
             else:
+                # special verification
+                if not (first is self.view_selector.selected_special) and not (
+                        second is self.view_selector.selected_special):
+                    return
                 cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay),
                                 '&Соединить', self.arc_connect)
-            cmenu.exec(pos)
         else:
             cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown),
                             '&Объединить в подсеть', self.enclose_selected)
-            cmenu.exec(pos)
+        self.__context_blocked = True
+        cmenu.exec(pos)
+
+    def contextMenuEvent(self, event):
+        # helps to cancel extra click after artificial context menu
+        if self.__context_blocked:
+            self.__context_blocked = False
+            return
+        # default behavior
+        super().contextMenuEvent(event)
+        # update mouse pos
+        self.mouse_ctrl.force_last_pos(self.mapToScene(event.pos()))
 
     def place_create(self):
         self.drawer.place_create(self.mouse_ctrl.last_pos())

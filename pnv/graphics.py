@@ -130,6 +130,7 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Markabl
         self.set_selected_brush(QtGui.QBrush(QtGui.QColor(0xafadff)))
         # arrows holder
         self.__arrows: set[PnvQGArrowItem] = set()
+        self.drawer = None
 
     def arrows(self) -> set['PnvQGArrowItem']:
         return self.__arrows
@@ -216,24 +217,32 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Markabl
                 painter.drawText(QtCore.QPointF(self.rect().x() + self.rect().width() // 2 - rect.width() // 2,
                                  self.rect().y() + self.rect().height() // 2 + rect.height() // 2), text)
 
-    # def contextMenuEvent(self, event: Optional[QGraphicsSceneContextMenuEvent]) -> None:
-    #     if self.petri_net_binded():
-    #         place: PetriNet.Place = self.petri_net_binded()
-    #         cmenu = QMenu(self.scene().parent())
-    #         if not self.final:
-    #             def _temp_set():
-    #                 self.final = True
-    #                 self.update()
-    #
-    #             cmenu.addAction('&Set final marking', _temp_set)
-    #         else:
-    #             def _temp_set():
-    #                 self.final = False
-    #                 self.update()
-    #
-    #             cmenu.addAction('&Set non-final marking', _temp_set)
-    #         cmenu.exec(event.screenPos())
-    #     super(PnvQGPlaceItem, self).contextMenuEvent(event)
+    def contextMenuEvent(self, event: Optional[QGraphicsSceneContextMenuEvent]) -> None:
+        if not self.is_interactive():
+            return
+        if not self.petri_net_bound():
+            return
+        cmenu = QMenu(self.scene().parent())
+        if not self.final:
+            def _temp_set():
+                self.final = True
+                self.update()
+
+            cmenu.addAction('&Отметить конечной', _temp_set)
+        else:
+            def _temp_set():
+                self.final = False
+                self.update()
+
+            cmenu.addAction('&Убрать конечную метку', _temp_set)
+        cmenu.addSeparator()
+        cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxCritical), '&Удалить',
+                        self.remove_item)
+        cmenu.exec(event.screenPos())
+        super(PnvQGPlaceItem, self).contextMenuEvent(event)
+
+    def remove_item(self):
+        self.drawer.place_remove(self)
 
 
 class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind):
@@ -289,16 +298,21 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind):
     def contextMenuEvent(self, event: Optional[QGraphicsSceneContextMenuEvent]) -> None:
         if not self.is_interactive():
             return
-        if self.petri_net_bound():
-            trans: PetriNet.Transition = self.petri_net_bound()
-            cmenu = QMenu(self.scene().parent())
-            if isinstance(trans, pnv.importer.epnml.ExtendedTransition):
-                cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp),
-                                '&Раскрыть подсеть', self.open_subnet)
-                cmenu.addSeparator()
-            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxCritical), '&Удалить')
-            cmenu.exec(event.screenPos())
+        if not self.petri_net_bound():
+            return
+        trans: PetriNet.Transition = self.petri_net_bound()
+        cmenu = QMenu(self.scene().parent())
+        if isinstance(trans, pnv.importer.epnml.ExtendedTransition):
+            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp),
+                            '&Раскрыть подсеть', self.open_subnet)
+            cmenu.addSeparator()
+        cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxCritical), '&Удалить',
+                        self.remove_item)
+        cmenu.exec(event.screenPos())
         super(PnvQGTransitionItem, self).contextMenuEvent(event)
+
+    def remove_item(self):
+        self.drawer.transition_remove(self)
 
     def open_subnet(self):
         try:

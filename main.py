@@ -315,29 +315,30 @@ class PnvMainWindow(QMainWindow):
         self.tabs.setTabText(idx, name)
 
 
-rootLogger = None
-
-
-def log_handler(type: QtCore.QtMsgType, context: QtCore.QMessageLogContext, msg: str):
-    if type == QtCore.QtMsgType.QtCriticalMsg:  # qCritical()
-        level = logging.CRITICAL
-    elif type == QtCore.QtMsgType.QtFatalMsg:  # qFatal()
-        level = logging.ERROR
-    elif type == QtCore.QtMsgType.QtWarningMsg:  # qWarning()
-        level = logging.WARNING
-    elif type == QtCore.QtMsgType.QtInfoMsg:  # qInfo()
-        level = logging.INFO
-    elif type == QtCore.QtMsgType.QtDebugMsg:  # qDebug()
-        level = logging.DEBUG
-    else:
-        level = logging.DEBUG
-    rootLogger.log(level, "%s", msg)
+# rootLogger = None
+#
+#
+# def log_handler(type: QtCore.QtMsgType, context: QtCore.QMessageLogContext, msg: str):
+#     if type == QtCore.QtMsgType.QtCriticalMsg:  # qCritical()
+#         level = logging.CRITICAL
+#     elif type == QtCore.QtMsgType.QtFatalMsg:  # qFatal()
+#         level = logging.ERROR
+#     elif type == QtCore.QtMsgType.QtWarningMsg:  # qWarning()
+#         level = logging.WARNING
+#     elif type == QtCore.QtMsgType.QtInfoMsg:  # qInfo()
+#         level = logging.INFO
+#     elif type == QtCore.QtMsgType.QtDebugMsg:  # qDebug()
+#         level = logging.DEBUG
+#     else:
+#         level = logging.DEBUG
+#     global rootLogger
+#     rootLogger.log(level, "%s", msg)
 
 
 def application():
-    logging.basicConfig()
-    root_logger = logging.getLogger(__name__)
-    root_logger.setLevel(logging.INFO)
+    # logging.basicConfig()
+    # root_logger = logging.getLogger(__name__)
+    # root_logger.setLevel(logging.INFO)
 
     app = QApplication(sys.argv)
     main_window = PnvMainWindow()
@@ -345,8 +346,7 @@ def application():
     app.setApplicationVersion(f'{CURRENT_VERSION}')
 
     main_window.show()
-    root_logger.info('!')
-    QtCore.qInstallMessageHandler(log_handler)
+    # QtCore.qInstallMessageHandler(log_handler)
     sys.exit(app.exec_())
 
 
