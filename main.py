@@ -108,6 +108,7 @@ class PnvMainWindow(QMainWindow):
         file_menu.aboutToShow.connect(self.file_menu_update)
         self.menu_bar.addMenu(file_menu)
         file_menu.addAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon), "&Открыть...", self.open_file)
+        file_menu.addAction(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon), "&Создать", self.create_file)
         file_menu.addSeparator()
         self.save_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton), "&Сохранить",
                                    self)
@@ -300,6 +301,51 @@ class PnvMainWindow(QMainWindow):
             g.viewer.edited_status = False
             g.viewer.drawer.edited_status = False
             self.update_tab(idx)
+
+    @QtCore.pyqtSlot()
+    def create_file(self):
+        path = self.get_new_file_path()
+        if len(path) == 0:
+            return
+        if pathlib.Path(path).exists() and not PnvMessageBoxes.is_accepted(
+                PnvMessageBoxes.accept(f"Выбранный файл уже существует!",
+                                       f"Файл будет перезаписан. Продолжить?",
+                                       icon=PnvMainWindow.WINDOW_ICON).exec()):
+            return
+        # create empty
+        pn, im, fm = PetriNet(), None, None
+
+        # init
+        name = os.path.basename(path)
+        gr = QGraphicsScene(self)
+        drawer = PnvDrawer(gr, pn)
+        viewer = PnvViewer(drawer, gr)
+
+        try:
+            # try draw
+            drawer.draw_petri_net()
+
+            idx = self.tabs.addTab(viewer, name)
+            gr_data = GraphData(path, (pn, im, fm), viewer, idx)
+            self.graphs.append(gr_data)
+
+            self.tabs.setTabToolTip(idx, path)
+            if self.stacked_widget.currentIndex() == 0:
+                # first graph to show
+                self.stacked_widget.setCurrentIndex(1)
+            self.tabs.setCurrentIndex(idx)
+        except TypeError as te:
+            if len(te.args) == 1 and te.args[0] == PnvMainWindow.RENDER_CANCELLED:
+                return
+            raise
+        except Exception as ex:
+            PnvMessageBoxes.warning("Невозможно отобразить Сеть-Петри!",
+                                    f"Извините, но данная версия PetriNetViewer {CURRENT_VERSION}. "
+                                    f"не может отобразить загруженный граф! "
+                                    f"Сообщение компонента-отрисовки {ex.__class__.__name__}: {ex}",
+                                    icon=PnvMainWindow.WINDOW_ICON).exec()
+            traceback.print_exc()
+            return
 
     def find_graph(self, idx: int) -> GraphData:
         g, *_ = [g for g in self.graphs if g.tab_idx == idx]

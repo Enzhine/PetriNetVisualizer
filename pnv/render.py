@@ -1,4 +1,5 @@
 import time
+import traceback
 from typing import Union, Optional, Tuple
 
 from PyQt5 import Qt, QtCore, QtGui
@@ -740,23 +741,26 @@ class PnvViewSelector(PnvToggleableComponent):
         self.deselect_all()
 
     def update(self):
-        if not self.is_enabled():
-            return
-        if self.__viewer.mouse_ctrl.holding and not self.__viewer.view_items_transformer.moving:
-            if self.__selection_obj is None:
-                item = self.is_clicked_item(self.__viewer.mouse_ctrl.last_pos())
-                if item:
-                    if PnvViewSelector.shift_pressed():
-                        self.select_special(item, False)
-                    else:
-                        self.select_special(item, not (item in self.selected_items))
-                    # item transformer hook
-                    return
-                self.__start_selection()
-            else:
-                self.__select()
-        elif self.__selection_obj is not None:
-            self.__finish_selection()
+        try:
+            if not self.is_enabled():
+                return
+            if self.__viewer.mouse_ctrl.holding and not self.__viewer.view_items_transformer.moving:
+                if self.__selection_obj is None:
+                    item = self.is_clicked_item(self.__viewer.mouse_ctrl.last_pos())
+                    if item:
+                        if PnvViewSelector.shift_pressed():
+                            self.select_special(item, False)
+                        else:
+                            self.select_special(item, not (item in self.selected_items))
+                        # item transformer hook
+                        return
+                    self.__start_selection()
+                else:
+                    self.__select()
+            elif self.__selection_obj is not None:
+                self.__finish_selection()
+        except Exception as ex:
+            print(ex)
 
 
 class LockButton(QPushButton):
