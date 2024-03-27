@@ -791,9 +791,8 @@ class LockButton(QPushButton):
 
 
 class PnvViewer(QGraphicsView):
-    def __init__(self, *args, **kwargs):
-        self.drawer: PnvDrawer = kwargs['drawer'] if 'drawer' in kwargs else None
-        del kwargs['drawer']
+    def __init__(self, drawer: PnvDrawer, *args, **kwargs):
+        self.drawer = drawer
         QGraphicsView.__init__(self, *args, *kwargs)  # Universal constructor bypass
         # scale module
         self.grid_distance = 100

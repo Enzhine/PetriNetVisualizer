@@ -1,4 +1,3 @@
-import logging
 import os
 import pathlib
 import sys
@@ -20,14 +19,12 @@ APP_NAME = "Petri Net Visualizer"
 
 
 class GraphData:
-    def __init__(self, path: str, exact_pn: tuple[PetriNet, Marking, Marking], viewer: PnvViewer,
-                 drawer: PnvDrawer, tab_idx: int):
+    def __init__(self, path: str, exact_pn: tuple[PetriNet, Marking, Marking], viewer: PnvViewer, tab_idx: int):
         self.path = path
         self.petri_net = exact_pn[0]
         self.init_marks = exact_pn[1]
         self.fin_marks = exact_pn[2]
         self.viewer: PnvViewer = viewer
-        self.drawer: PnvDrawer = drawer
         self.tab_idx: int = tab_idx
 
 
@@ -162,7 +159,7 @@ class PnvMainWindow(QMainWindow):
         changes = []
         if g.viewer.edited_status:
             changes.append('перемещены элементы сети')
-        if g.drawer.edited_status:
+        if g.viewer.drawer.edited_status:
             changes.append('сгенерирована разметка')
         if len(changes) != 0 and PnvMessageBoxes.is_accepted(
                 PnvMessageBoxes.accept(f"В загруженную сеть были внесены изменения!",
@@ -234,7 +231,7 @@ class PnvMainWindow(QMainWindow):
             name = os.path.basename(path)
             gr = QGraphicsScene(self)
             drawer = PnvDrawer(gr, pn)
-            viewer = PnvViewer(gr, drawer=drawer)
+            viewer = PnvViewer(drawer, gr)
             try:
                 drawer.draw_petri_net()
             except TypeError as te:
@@ -250,7 +247,7 @@ class PnvMainWindow(QMainWindow):
                 traceback.print_exc()
                 return
             idx = self.tabs.addTab(viewer, name)
-            gr_data = GraphData(path, (pn, im, fm), viewer, drawer, idx)
+            gr_data = GraphData(path, (pn, im, fm), viewer, idx)
             self.graphs.append(gr_data)
 
             self.tabs.setTabToolTip(idx, path)
@@ -271,7 +268,7 @@ class PnvMainWindow(QMainWindow):
         changes = []
         if g.viewer.edited_status:
             changes.append('перемещены элементы сети')
-        if g.drawer.edited_status:
+        if g.viewer.drawer.edited_status:
             changes.append('сгенерирована разметка')
         if len(changes) != 0 and PnvMessageBoxes.is_accepted(
                 PnvMessageBoxes.accept(f"В загруженную сеть были внесены изменения!",
@@ -301,7 +298,7 @@ class PnvMainWindow(QMainWindow):
             MethodsIO.save_as_epnml(g, path)
             g.path = path
             g.viewer.edited_status = False
-            g.drawer.edited_status = False
+            g.viewer.drawer.edited_status = False
             self.update_tab(idx)
 
     def find_graph(self, idx: int) -> GraphData:
