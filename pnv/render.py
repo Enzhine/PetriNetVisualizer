@@ -1,12 +1,11 @@
 import time
-import traceback
 from typing import Union, Optional, Tuple
 
 from PyQt5 import Qt, QtCore, QtGui
 from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsRectItem, QGraphicsView, QApplication, QMenu, \
     QStyle, QPushButton
-from pm4py import PetriNet
+from pm4py import PetriNet, Marking
 from igraph import Graph
 
 import pnv.importer.epnml
@@ -17,15 +16,42 @@ from pnv.utils import PnvMessageBoxes
 Layout = Tuple[Tuple[int, int], Tuple[int, int]]
 
 
+class PnvEditState:
+    def __init__(self):
+        self.layout_generated = False
+        self.layout_changed = False
+        self.meta_data = False
+
+    def is_changed(self) -> bool:
+        return self.layout_generated or \
+            self.layout_changed or \
+            self.meta_data
+
+    def changes(self) -> list[str]:
+        changes: list[str] = []
+        if self.layout_changed:
+            changes.append('перемещены элементы сети')
+        if self.layout_generated:
+            changes.append('сгенерирована разметка')
+        if self.meta_data:
+            changes.append('обновлены компоненты')
+        return changes
+
+    def reset(self):
+        self.layout_generated = False
+        self.layout_changed = False
+        self.meta_data = False
+
+
 class PnvDrawer:
     GRAPHICS_WIDTH = 40
 
     def __init__(self, scene: QGraphicsScene, net: PetriNet):
         self.scene = scene
         self.net = net
-        self.mapper: dict[Union[PetriNet.Place, PetriNet.Transition],
-        Union[PnvQGTransitionItem, PnvQGPlaceItem]] = dict()
-        self.edited_status = False
+        self.mapper: dict[
+            Union[PetriNet.Place, PetriNet.Transition], Union[PnvQGTransitionItem, PnvQGPlaceItem]] = dict()
+        self.status = PnvEditState()
 
     def draw_place_directly(self, x: int, y: int, r: int) -> PnvQGPlaceItem:
         # custom ellipse init
@@ -37,14 +63,7 @@ class PnvDrawer:
         # custom rectangle init
         obj = PnvQGTransitionItem(QtCore.QRectF(x - w / 2, y - h / 2, w, h))
         self.scene.addItem(obj)
-        if label:
-            text = self.scene.addText(label)
-            w = QtGui.QFontMetrics(text.font()).width(label)
-            h = QtGui.QFontMetrics(text.font()).height()
-            text.setPos(QtCore.QPointF(x - w / 2, y + h))
-            # binding text, but not events
-            text.setParentItem(obj)
-            text.setAcceptHoverEvents(False)
+        obj.set_label(label, (w / 2, h / 2))
         return obj
 
     def draw_place(self, p: PetriNet.Place) -> PnvQGPlaceItem:
@@ -92,7 +111,6 @@ class PnvDrawer:
                                     f"Будет произведена генерация автоматической разметки.",
                                     icon=PnvMainWindow.WINDOW_ICON).exec()
             self.igraph_gen_layout(self.net)
-            self.edited_status = True
         for p in self.net.places:
             self.mapper[p] = self.draw_place(p)
         for t in self.net.transitions:
@@ -134,7 +152,10 @@ class PnvDrawer:
             lay = ((gen[0], gen[1]), (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
             PnvDrawer.inject_layout(local_mapper_re[i], lay)
 
-    def connect_arc(self, from_: Union[PnvQGTransitionItem, PnvQGPlaceItem], to: Union[PnvQGTransitionItem, PnvQGPlaceItem]):
+        self.status.layout_generated = True
+
+    def connect_arc(self, from_: Union[PnvQGTransitionItem, PnvQGPlaceItem],
+                    to: Union[PnvQGTransitionItem, PnvQGPlaceItem]):
         # net arc
         arc = PetriNet.Arc(from_.petri_net_bound(), to.petri_net_bound())
         self.net.arcs.add(arc)
@@ -145,7 +166,10 @@ class PnvDrawer:
         from_.arrows().add(arrow)
         to.arrows().add(arrow)
 
-    def disconnect_arc(self, one: Union[PnvQGTransitionItem, PnvQGPlaceItem], two: Union[PnvQGTransitionItem, PnvQGPlaceItem]):
+        self.status.layout_changed = True
+
+    def disconnect_arc(self, one: Union[PnvQGTransitionItem, PnvQGPlaceItem],
+                       two: Union[PnvQGTransitionItem, PnvQGPlaceItem]):
         to = None
         from_ = None
         for arrow in one.arrows():
@@ -176,6 +200,8 @@ class PnvDrawer:
         arrow.hide()
         self.scene.removeItem(arrow)
 
+        self.status.layout_changed = True
+
     def place_create(self, pos: QtCore.QPointF):
         p = PetriNet.Place(f'p{str(time.time())}')
         lay = ((pos.x(), pos.y()), (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
@@ -183,12 +209,16 @@ class PnvDrawer:
         self.mapper[p] = self.draw_place(p)
         self.net.places.add(p)
 
+        self.status.layout_changed = True
+
     def transition_create(self, pos: QtCore.QPointF):
         t = PetriNet.Transition(f'p{str(time.time())}')
         lay = ((pos.x(), pos.y()), (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
         PnvDrawer.inject_layout(t, lay)
         self.mapper[t] = self.draw_transition(t)
         self.net.transitions.add(t)
+
+        self.status.layout_changed = True
 
     def place_remove(self, item: PnvQGPlaceItem):
         # net remove
@@ -212,6 +242,8 @@ class PnvDrawer:
         self.scene.removeItem(item)
         self.scene.update()
 
+        self.status.layout_changed = True
+
     def transition_remove(self, item: PnvQGTransitionItem):
         # net remove
         bound = item.petri_net_bound()
@@ -233,6 +265,8 @@ class PnvDrawer:
         item.hide()
         self.scene.removeItem(item)
         self.scene.update()
+
+        self.status.layout_changed = True
 
     def subnet_unwrap(self, trans_obj: PnvQGTransitionItem):
         extr: PetriNet.Transition = trans_obj.petri_net_bound()
@@ -288,7 +322,6 @@ class PnvDrawer:
         # # layout gen
         if not all(self.has_layout(obj) for obj in [*wrapped_net.places, *wrapped_net.transitions]):
             self.igraph_gen_layout(wrapped_net)
-            self.edited_status = True
         # # places inject
         for p in wrapped_net.places:
             # gui
@@ -328,10 +361,14 @@ class PnvDrawer:
         for arrow in total_arrows:
             if not (arrow.to in objs):
                 outer_to_objs.add(arrow.to)
-                boundary_transitions = boundary_transitions and isinstance(arrow.from_, PnvQGTransitionItem) and not isinstance(arrow.from_.petri_net_bound(), ExtendedTransition)
+                boundary_transitions = boundary_transitions and isinstance(arrow.from_,
+                                                                           PnvQGTransitionItem) and not isinstance(
+                    arrow.from_.petri_net_bound(), ExtendedTransition)
             elif not (arrow.from_ in objs):
                 outer_from_objs.add(arrow.from_)
-                boundary_transitions = boundary_transitions and isinstance(arrow.to, PnvQGTransitionItem) and not isinstance(arrow.to.petri_net_bound(), ExtendedTransition)
+                boundary_transitions = boundary_transitions and isinstance(arrow.to,
+                                                                           PnvQGTransitionItem) and not isinstance(
+                    arrow.to.petri_net_bound(), ExtendedTransition)
         # boundary verification
         if not boundary_transitions:
             raise pnv.importer.epnml.EPNMLException('Boundary objects must be simple transitions!')
@@ -573,6 +610,8 @@ class PnvItemsTransformer(PnvToggleableComponent):
         for arr in arrows:
             arr.update(arr.boundingRect())
 
+        self.__viewer.drawer.status.layout_changed = True
+
     def __is_started(self):
         return self.__start_pos
 
@@ -741,26 +780,23 @@ class PnvViewSelector(PnvToggleableComponent):
         self.deselect_all()
 
     def update(self):
-        try:
-            if not self.is_enabled():
-                return
-            if self.__viewer.mouse_ctrl.holding and not self.__viewer.view_items_transformer.moving:
-                if self.__selection_obj is None:
-                    item = self.is_clicked_item(self.__viewer.mouse_ctrl.last_pos())
-                    if item:
-                        if PnvViewSelector.shift_pressed():
-                            self.select_special(item, False)
-                        else:
-                            self.select_special(item, not (item in self.selected_items))
-                        # item transformer hook
-                        return
-                    self.__start_selection()
-                else:
-                    self.__select()
-            elif self.__selection_obj is not None:
-                self.__finish_selection()
-        except Exception as ex:
-            print(ex)
+        if not self.is_enabled():
+            return
+        if self.__viewer.mouse_ctrl.holding and not self.__viewer.view_items_transformer.moving:
+            if self.__selection_obj is None:
+                item = self.is_clicked_item(self.__viewer.mouse_ctrl.last_pos())
+                if item:
+                    if PnvViewSelector.shift_pressed():
+                        self.select_special(item, False)
+                    else:
+                        self.select_special(item, not (item in self.selected_items))
+                    # item transformer hook
+                    return
+                self.__start_selection()
+            else:
+                self.__select()
+        elif self.__selection_obj is not None:
+            self.__finish_selection()
 
 
 class LockButton(QPushButton):
@@ -813,8 +849,6 @@ class PnvViewer(QGraphicsView):
         self.view_items_transformer = PnvItemsTransformer(self)
         # context menu fire module
         self.view_context_fire = PnvViewContextFirer(self)
-        # props
-        self.edited_status = False
         # settings
         self.setVerticalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
@@ -962,15 +996,48 @@ class PnvViewer(QGraphicsView):
     #     if lp:
     #         painter.drawEllipse(QtCore.QRectF(lp.x() - 10, lp.y() - 10, 20, 20))
 
+    def can_be_saved(self):
+        c = 0
+        for obj in self.items():
+            if not isinstance(obj, (PnvQGPlaceItem, PnvQGTransitionItem)):
+                continue
+            c += 1
+        return c != 0
+
     def inject_all_positions(self):
         for obj in self.items():
             if not isinstance(obj, (PnvQGPlaceItem, PnvQGTransitionItem)):
                 continue
             bind = obj.petri_net_bound()
-            if not obj:
+            if not bind:
                 continue
             lay = PnvDrawer.layout(bind)
             new_lay = (PnvDrawer.final_pos(obj), (lay[1][0], lay[1][1]))
             if new_lay == lay:
                 continue
             bind.properties['layout_information_petri'] = new_lay
+
+    def retrieve_markings(self) -> tuple[Marking, Marking]:
+        init = Marking()
+        final = Marking()
+        for obj in self.items():
+            if not isinstance(obj, PnvQGPlaceItem):
+                continue
+            if obj.final:
+                final[obj.petri_net_bound()] = 1
+            elif obj.markings != 0:
+                init[obj.petri_net_bound()] = obj.markings
+        return init, final
+
+    def init_markings(self, init: Marking, final: Marking):
+        for obj in self.items():
+            if not isinstance(obj, PnvQGPlaceItem):
+                continue
+            bound = obj.petri_net_bound()
+            if (init is not None) and (bound in init):
+                obj.markings = init[bound]
+            elif (final is not None) and (bound in final):
+                obj.final = final[bound]
+
+    def is_hierarchical_one(self):
+        return any(isinstance(obj.petri_net_bound(), ExtendedTransition) for obj in self.items() if isinstance(obj, PnvQGTransitionItem))

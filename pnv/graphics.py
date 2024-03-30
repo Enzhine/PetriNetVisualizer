@@ -1,17 +1,71 @@
 from typing import Union, Optional
 
-from PyQt5 import QtGui, QtCore
+from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtCore import QRectF
 from PyQt5.QtGui import QBrush, QColor
 from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsSceneContextMenuEvent, \
     QGraphicsSceneHoverEvent, QStyleOptionGraphicsItem, QWidget, QGraphicsRectItem, QMenu, QStyle, \
-    QGraphicsLineItem, QGraphicsItem
+    QGraphicsLineItem, QGraphicsItem, QAbstractGraphicsShapeItem, QGraphicsTextItem
 import math
 import numpy as np
 from pm4py import PetriNet
 
 import pnv.importer.epnml
 from pnv.utils import PnvMessageBoxes
+
+
+class Labeling:
+    def __init__(self):
+        self.__text_obj: Union[QGraphicsTextItem, None] = None
+        self.__text: str = None
+
+    def _instance(self) -> Union['PnvQGTransitionItem', 'PnvQGPlaceItem']:
+        raise NotImplementedError()
+
+    def __remove_label(self):
+        self._instance().scene().removeItem(self.__text_obj)
+        self.__text_obj = None
+
+    def text_offset(self) -> tuple[float, float]:
+        x = self.__text_obj.rect().x()
+        y = self.__text_obj.rect().y()
+        obj = self._instance()
+
+        w = QtGui.QFontMetrics(self.__text_obj.font()).width(self.__text)
+        h = QtGui.QFontMetrics(self.__text_obj.font()).height()
+
+        x -= obj.x() + int(obj.rect().x()) + w / 2
+        y -= obj.y() + int(obj.rect().y()) - h
+        return x, y
+
+    def __add_label(self, label: str, offset: tuple[float, float]):
+        text = self._instance().scene().addText(label)
+        self.__text = label
+
+        w = QtGui.QFontMetrics(text.font()).width(label)
+        h = QtGui.QFontMetrics(text.font()).height()
+
+        obj = self._instance()
+        off_x, off_y = offset
+        x, y = int(obj.rect().x() + off_x) + obj.x(), int(obj.rect().y() + off_y) + obj.y()
+
+        text.setPos(QtCore.QPointF(x - w / 2, y + h))
+        text.setParentItem(self._instance())
+        text.setAcceptHoverEvents(False)
+        self.__text_obj = text
+
+    def set_label(self, label: str, offset: tuple[float, float] = (0, 0)):
+        if self.__text_obj is None:
+            if label is None or len(label.strip()) == 0:
+                return
+            else:
+                self.__add_label(label, offset)
+        else:
+            if label is None or len(label.strip()) == 0:
+                self.__remove_label()
+            else:
+                self.__remove_label()
+                self.__add_label(label, offset)
 
 
 class Markable:
@@ -154,11 +208,7 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Markabl
         self.pnv_is_hovered = True
         super().hoverEnterEvent(event)
 
-    def paint(self, painter: Optional[QtGui.QPainter], option: Optional['QStyleOptionGraphicsItem'],
-              widget: Optional['QWidget'] = ...) -> None:
-        painter.setPen(self.pen())
-        painter.setBrush(self.brush())
-        painter.drawEllipse(self.rect())
+    def draw_marked(self, painter: Optional[QtGui.QPainter]):
         if self.final:
             offset = 4 * painter.pen().width()
             sub = QRectF(self.rect().x() + offset // 2, self.rect().y() + offset // 2,
@@ -210,12 +260,37 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Markabl
             else:
                 f = painter.font()
                 text = str(self.markings)
-                f.setPixelSize(int(self.rect().width() * 0.8 - 8*(len(text)-1)))
+                f.setPixelSize(int(self.rect().width() * 0.8 - 8 * (len(text) - 1)))
                 painter.setFont(f)
                 fm = QtGui.QFontMetrics(f)
                 rect = fm.tightBoundingRect(text)
                 painter.drawText(QtCore.QPointF(self.rect().x() + self.rect().width() // 2 - rect.width() // 2,
-                                 self.rect().y() + self.rect().height() // 2 + rect.height() // 2), text)
+                                                self.rect().y() + self.rect().height() // 2 + rect.height() // 2), text)
+
+    def paint(self, painter: Optional[QtGui.QPainter], option: Optional['QStyleOptionGraphicsItem'],
+              widget: Optional['QWidget'] = ...) -> None:
+        painter.setPen(self.pen())
+        painter.setBrush(self.brush())
+        painter.drawEllipse(self.rect())
+        self.draw_marked(painter)
+
+    def _ctxt_update_tokens(self):
+        tokens, done = QtWidgets.QInputDialog.getInt(
+            self.drawer.scene.activeWindow(),
+            'Petri Net Viewer Dialog',
+            '&Введите число фишек:',
+            value=self.markings,
+            min=0)
+        if done:
+            self.markings = tokens
+
+            self.drawer.status.meta_data = True
+
+    def _ctxt_update_fin(self, fin: bool):
+        self.final = fin
+        self.update()
+
+        self.drawer.status.meta_data = True
 
     def contextMenuEvent(self, event: Optional[QGraphicsSceneContextMenuEvent]) -> None:
         if not self.is_interactive():
@@ -223,18 +298,12 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Markabl
         if not self.petri_net_bound():
             return
         cmenu = QMenu(self.scene().parent())
+
         if not self.final:
-            def _temp_set():
-                self.final = True
-                self.update()
-
-            cmenu.addAction('&Отметить конечной', _temp_set)
+            cmenu.addAction('&Назначить фишки', lambda: self._ctxt_update_tokens())
+            cmenu.addAction('&Отметить конечной', lambda: self._ctxt_update_fin(True))
         else:
-            def _temp_set():
-                self.final = False
-                self.update()
-
-            cmenu.addAction('&Убрать конечную метку', _temp_set)
+            cmenu.addAction('&Убрать конечную метку', lambda: self._ctxt_update_fin(False))
         cmenu.addSeparator()
         cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxCritical), '&Удалить',
                         self.remove_item)
@@ -245,12 +314,13 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Markabl
         self.drawer.place_remove(self)
 
 
-class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind):
+class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Labeling):
 
     def __init__(self, *args, **kwargs):
         PetriNetBind.__init__(self)
         QGraphicsRectItem.__init__(self, *args, *kwargs)  # Universal constructor bypass
         PnvInteractive.__init__(self)
+        Labeling.__init__(self)
         # arrows holder
         self.setPen(QtGui.QPen(QtGui.QColor('black'), 3))
         self.setBrush(QtGui.QBrush(QtGui.QColor('white')))
@@ -259,6 +329,9 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind):
         #
         self.__arrows: set[PnvQGArrowItem] = set()
         self.drawer = None
+
+    def _instance(self) -> QAbstractGraphicsShapeItem:
+        return self
 
     def arrows(self) -> set['PnvQGArrowItem']:
         return self.__arrows
@@ -295,6 +368,19 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind):
             self.setPen(QtGui.QPen(QtGui.QColor('black'), 3))
         super().petri_net_bind(obj)
 
+    def _ctxt_change_label(self):
+        txt, done = QtWidgets.QInputDialog.getText(
+            self.drawer.scene.activeWindow(),
+            'Petri Net Viewer Dialog',
+            '&Ярлык:',
+            text=self.petri_net_bound().label)
+        if done:
+            self.petri_net_bound().label = txt
+            w, h = self.petri_net_bound().properties['layout_information_petri'][1]
+            self.set_label(self.petri_net_bound().label, (w / 2, h / 2))
+
+            self.drawer.status.meta_data = True
+
     def contextMenuEvent(self, event: Optional[QGraphicsSceneContextMenuEvent]) -> None:
         if not self.is_interactive():
             return
@@ -302,6 +388,8 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind):
             return
         trans: PetriNet.Transition = self.petri_net_bound()
         cmenu = QMenu(self.scene().parent())
+        cmenu.addAction('&Назначить ярлык', lambda: self._ctxt_change_label())
+        cmenu.addSeparator()
         if isinstance(trans, pnv.importer.epnml.ExtendedTransition):
             cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp),
                             '&Раскрыть подсеть', self.open_subnet)

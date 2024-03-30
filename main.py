@@ -14,7 +14,7 @@ from pnv.importer import epnml
 from pnv.render import PnvViewer, PnvDrawer
 from pnv.utils import PnvMessageBoxes, PnvConfig
 
-CURRENT_VERSION = '1.19'
+CURRENT_VERSION = '1.20'
 APP_NAME = "Petri Net Visualizer"
 
 
@@ -29,13 +29,48 @@ class GraphData:
 
 
 class MethodsIO:
+    PNML_FORMAT = '.pnml'
+    EPNML_FORMAT = '.epnml'
+
+    @staticmethod
+    def import_net(path: str) -> tuple[PetriNet, Marking, Marking]:
+        if path.endswith(MethodsIO.PNML_FORMAT):
+            pn, im, fm = pm4py.read_pnml(path)
+        elif path.endswith(MethodsIO.EPNML_FORMAT):
+            pn, im, fm = epnml.import_net(path, None)
+        else:
+            raise ValueError(f'Unknown file format {path}!')
+        return pn, im, fm
+
+    @staticmethod
+    def export_net(g: GraphData, path: str):
+        if path.endswith(MethodsIO.PNML_FORMAT):
+            if g.viewer.is_hierarchical_one() and \
+                    PnvMessageBoxes.accept(f"Данная сеть является иерархической!",
+                                           f"Выбранный формат файла не поддерживает хранение иерархических сетей, "
+                                           f"поэтому часть данных будет потеряна!",
+                                           icon=PnvMainWindow.WINDOW_ICON).exec():
+                MethodsIO.save_as_pnml(g, path)
+        elif path.endswith(MethodsIO.EPNML_FORMAT):
+            MethodsIO.save_as_epnml(g, path)
+        else:
+            raise ValueError(f'Unknown file format {path}!')
+
     @staticmethod
     def save_as_pnml(g: GraphData, file_path: str):
-        pm4py.write_pnml(g.petri_net, g.init_marks, g.fin_marks, file_path)
+        if g.viewer.drawer.status.is_changed():
+            g.viewer.inject_all_positions()
+            init, fin = g.viewer.retrieve_markings()
+            g.viewer.drawer.status.reset()
+            pm4py.write_pnml(g.petri_net, init, fin, file_path)
 
     @staticmethod
     def save_as_epnml(g: GraphData, file_path: str):
-        epnml.export_net(g.petri_net, g.init_marks, file_path, g.fin_marks)
+        if g.viewer.drawer.status.is_changed():
+            g.viewer.inject_all_positions()
+            init, fin = g.viewer.retrieve_markings()
+            g.viewer.drawer.status.reset()
+            epnml.export_net(g.petri_net, init, file_path, fin)
 
 
 class PnvMainWindow(QMainWindow):
@@ -137,9 +172,9 @@ class PnvMainWindow(QMainWindow):
         wm.setWindowTitle("Информация о программе")
         wm.setText(f"Petri Net Visualizer - приложение для визуализации сетей Петри.\n"
                    f"Фреймворк для интерфейса: PyQt5.\n"
-                   f"Библиотека обработки данных: PM4PY."
-                   f"Библиотека генерации разметки: igraph."
-                   f"\n\n"
+                   f"Библиотека обработки данных: PM4PY.\n"
+                   f"Библиотека генерации разметки: igraph.\n"
+                   f"\n"
                    f"Разработчик: Шамаев Онар Евгеньевич\n"
                    f"Версия: {CURRENT_VERSION}")
         # settings
@@ -150,6 +185,23 @@ class PnvMainWindow(QMainWindow):
     def close_tab(self, idx: int):
         self.on_close_tab(idx, True)
 
+    def save_graph(self, g: GraphData, path: str, req: bool = True):
+        changes = g.viewer.drawer.status.changes()
+        if not g.viewer.can_be_saved():
+            if req:
+                PnvMessageBoxes.warning("Сеть-Петри не может быть сохранена!",
+                                        f"Данная конфигурацию сети нельзя сохранить.",
+                                        icon=PnvMainWindow.WINDOW_ICON).exec()
+            return
+        if req:
+            if len(changes) != 0 and not PnvMessageBoxes.is_accepted(
+                    PnvMessageBoxes.accept(f"В загруженную сеть были внесены изменения!",
+                                           f"Изменения: {','.join(changes)}. "
+                                           f"Сохранить изменённую версию, перезаписав файл?",
+                                           icon=PnvMainWindow.WINDOW_ICON).exec()):
+                return
+        MethodsIO.export_net(g, path)
+
     def on_close_tab(self, idx: int, request) -> bool:
         if request and not PnvMessageBoxes.is_accepted(
                 PnvMessageBoxes.question(f"Вы собираетесь закрыть вкладку {self.tabs.tabText(idx)}.",
@@ -157,21 +209,8 @@ class PnvMainWindow(QMainWindow):
                                          icon=PnvMainWindow.WINDOW_ICON).exec()):
             return False
         g = self.find_graph(idx)
-        changes = []
-        if g.viewer.edited_status:
-            changes.append('перемещены элементы сети')
-        if g.viewer.drawer.edited_status:
-            changes.append('сгенерирована разметка')
-        if len(changes) != 0 and PnvMessageBoxes.is_accepted(
-                PnvMessageBoxes.accept(f"В загруженную сеть были внесены изменения!",
-                                       f"Изменения: {','.join(changes)}. "
-                                       f"Сохранить изменённую версию, перезаписав файл?",
-                                       icon=PnvMainWindow.WINDOW_ICON).exec()):
-            # apply changes
-            if g.viewer.edited_status:
-                g.viewer.inject_all_positions()
-                g.viewer.edited_status = False
-            MethodsIO.save_as_epnml(g, g.path)
+        self.save_graph(g, g.path)
+
         self.tabs.removeTab(idx)
         self.graphs.remove(g)
         for g in self.graphs:
@@ -208,10 +247,7 @@ class PnvMainWindow(QMainWindow):
                 return
         try:
             # load
-            if path.endswith('.pnml'):
-                pn, im, fm = pm4py.read_pnml(path)
-            elif path.endswith('.epnml'):
-                pn, im, fm = epnml.import_net(path, None)
+            pn, im, fm = MethodsIO.import_net(path)
             # check
             if all(len(t) == 0 for t in [pn.places, pn.transitions]):
                 PnvMessageBoxes.warning("Загружена пустая сеть!",
@@ -235,6 +271,7 @@ class PnvMainWindow(QMainWindow):
             viewer = PnvViewer(drawer, gr)
             try:
                 drawer.draw_petri_net()
+                viewer.init_markings(im, fm)
             except TypeError as te:
                 if len(te.args) == 1 and te.args[0] == PnvMainWindow.RENDER_CANCELLED:
                     return
@@ -266,21 +303,7 @@ class PnvMainWindow(QMainWindow):
     @QtCore.pyqtSlot()
     def save_file(self):
         g = self.find_graph(self.tabs.currentIndex())
-        changes = []
-        if g.viewer.edited_status:
-            changes.append('перемещены элементы сети')
-        if g.viewer.drawer.edited_status:
-            changes.append('сгенерирована разметка')
-        if len(changes) != 0 and PnvMessageBoxes.is_accepted(
-                PnvMessageBoxes.accept(f"В загруженную сеть были внесены изменения!",
-                                       f"Изменения: {','.join(changes)}. "
-                                       f"Исходный файл будет перезаписан. Продолжить?",
-                                       icon=PnvMainWindow.WINDOW_ICON).exec()):
-            # apply changes
-            if g.viewer.edited_status:
-                g.viewer.inject_all_positions()
-                g.viewer.edited_status = False
-            MethodsIO.save_as_epnml(g, g.path)
+        self.save_graph(g, g.path)
 
     @QtCore.pyqtSlot()
     def save_file_as(self):
@@ -293,10 +316,7 @@ class PnvMainWindow(QMainWindow):
                 return
             idx = self.tabs.currentIndex()
             g = self.find_graph(idx)
-            if g.viewer.edited_status:
-                g.viewer.inject_all_positions()
-                g.viewer.edited_status = False
-            MethodsIO.save_as_epnml(g, path)
+            self.save_graph(g, path, req=False)
             g.path = path
             g.viewer.edited_status = False
             g.viewer.drawer.edited_status = False
@@ -315,12 +335,23 @@ class PnvMainWindow(QMainWindow):
         # create empty
         pn, im, fm = PetriNet(), None, None
 
+        # empty net
+        tr = PetriNet.Transition('t0')
+        PnvDrawer.inject_layout(tr, ((0, 0), (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH,)))
+        pl = PetriNet.Place('p0')
+        PnvDrawer.inject_layout(pl, ((200, 0), (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH,)))
+        arc = PetriNet.Arc(tr, pl)
+        tr.out_arcs.add(arc)
+        pl.in_arcs.add(arc)
+        pn.transitions.add(tr)
+        pn.places.add(pl)
+        pn.arcs.add(arc)
+
         # init
         name = os.path.basename(path)
         gr = QGraphicsScene(self)
         drawer = PnvDrawer(gr, pn)
         viewer = PnvViewer(drawer, gr)
-
         try:
             # try draw
             drawer.draw_petri_net()
