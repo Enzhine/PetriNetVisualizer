@@ -990,12 +990,6 @@ class PnvViewer(QGraphicsView):
         for yt in range(y, y0 + 1, self.grid_distance):
             painter.drawLine(Qt.QLineF(rect.x(), yt, rect.x() + rect.width(), yt))
 
-    # def drawForeground(self, painter: Optional[QtGui.QPainter], rect: QtCore.QRectF) -> None:
-    #     painter.setPen(self.bg_grid_pen)
-    #     lp = self.mouse_ctrl.last_pos()
-    #     if lp:
-    #         painter.drawEllipse(QtCore.QRectF(lp.x() - 10, lp.y() - 10, 20, 20))
-
     def can_be_saved(self):
         c = 0
         for obj in self.items():

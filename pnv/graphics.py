@@ -444,7 +444,6 @@ class PnvQGArrowItem(QGraphicsLineItem):
         return self._x2, self._y2
 
     def last_line(self) -> tuple[float, float, float, float]:
-        # TODO: somehow fix transition arrow
         xy0, s0 = self.from_point(), self.from_sizes()
         xy1, s1 = self.to_point(), self.to_sizes()
         vec = (xy1[0] - xy0[0], xy1[1] - xy0[1])
