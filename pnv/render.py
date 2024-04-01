@@ -991,12 +991,17 @@ class PnvViewer(QGraphicsView):
             painter.drawLine(Qt.QLineF(rect.x(), yt, rect.x() + rect.width(), yt))
 
     def can_be_saved(self):
-        c = 0
+        places = 0
+        transitions = 0
+        arcs = 0
         for obj in self.items():
-            if not isinstance(obj, (PnvQGPlaceItem, PnvQGTransitionItem)):
-                continue
-            c += 1
-        return c != 0
+            if isinstance(obj, PnvQGPlaceItem):
+                places += 1
+                arcs += len(obj.arrows())
+            elif isinstance(obj, PnvQGTransitionItem):
+                transitions += 1
+                arcs += len(obj.arrows())
+        return places != 0 and transitions != 0 and arcs != 0
 
     def inject_all_positions(self):
         for obj in self.items():
