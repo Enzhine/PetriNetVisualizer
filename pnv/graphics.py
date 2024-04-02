@@ -47,7 +47,7 @@ class Labeling:
 
         obj = self._instance()
         off_x, off_y = offset
-        x, y = int(obj.rect().x() + off_x) + obj.x(), int(obj.rect().y() + off_y) + obj.y()
+        x, y = int(obj.rect().x() + off_x), int(obj.rect().y() + off_y)
 
         text.setPos(QtCore.QPointF(x - w / 2, y + h))
         text.setParentItem(self._instance())

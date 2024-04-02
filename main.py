@@ -46,10 +46,10 @@ class MethodsIO:
     def export_net(g: GraphData, path: str):
         if path.endswith(MethodsIO.PNML_FORMAT):
             if g.viewer.is_hierarchical_one() and \
-                    PnvMessageBoxes.accept(f"Данная сеть является иерархической!",
+                    PnvMessageBoxes.is_accepted(PnvMessageBoxes.accept(f"Данная сеть является иерархической!",
                                            f"Выбранный формат файла не поддерживает хранение иерархических сетей, "
                                            f"поэтому часть данных будет потеряна!",
-                                           icon=PnvMainWindow.WINDOW_ICON).exec():
+                                           icon=PnvMainWindow.WINDOW_ICON).exec()):
                 MethodsIO.save_as_pnml(g, path)
         elif path.endswith(MethodsIO.EPNML_FORMAT):
             MethodsIO.save_as_epnml(g, path)
@@ -92,7 +92,7 @@ class PnvMainWindow(QMainWindow):
         self.graph_scene: Union[QGraphicsScene, None] = None
         self.tabs: Union[QTabWidget, None] = None
         # static
-        PnvMainWindow.WINDOW_ICON = QtGui.QIcon('resources/pnv_icon.png')
+        PnvMainWindow.WINDOW_ICON = QtGui.QIcon('resources/pnv_icon.ico')
         # config
         try:
             PnvMainWindow.CONFIG = PnvConfig(APP_NAME)
