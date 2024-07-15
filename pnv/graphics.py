@@ -67,6 +67,9 @@ class Labeling:
                 self.__remove_label()
                 self.__add_label(label, offset)
 
+    def set_visible(self, visible: bool):
+        self.__text_obj.setVisible(visible)
+
 
 class Markable:
     def __init__(self, marks=0, final=False):
@@ -328,6 +331,7 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Label
         self.set_selected_brush(QtGui.QBrush(QtGui.QColor(0xafafff)))
         #
         self.__arrows: set[PnvQGArrowItem] = set()
+        self.only_wuw = False
         self.drawer = None
 
     def _instance(self) -> QAbstractGraphicsShapeItem:
@@ -387,6 +391,16 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Label
         if not self.petri_net_bound():
             return
         trans: PetriNet.Transition = self.petri_net_bound()
+        # special mode
+        if self.only_wuw:
+            if not isinstance(trans, pnv.importer.epnml.ExtendedTransition):
+                return
+            cmenu = QMenu(self.scene().parent())
+            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp),
+                            '&Раскрыть подсеть', self.open_subnet)
+            cmenu.exec(event.screenPos())
+            super(PnvQGTransitionItem, self).contextMenuEvent(event)
+            return
         cmenu = QMenu(self.scene().parent())
         cmenu.addAction('&Назначить ярлык', lambda: self._ctxt_change_label())
         cmenu.addSeparator()

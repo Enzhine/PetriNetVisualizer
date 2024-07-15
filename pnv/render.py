@@ -10,7 +10,7 @@ from igraph import Graph
 from math import log, floor, ceil
 
 import pnv.importer.epnml
-from pnv.graphics import PnvQGTransitionItem, PnvQGPlaceItem, PnvQGArrowItem
+from pnv.graphics import PnvQGTransitionItem, PnvQGPlaceItem, PnvQGArrowItem, Labeling
 from pnv.importer.epnml import ExtendedTransition
 from pnv.utils import PnvMessageBoxes, PnvConfig, PnvConfigConstants
 
@@ -50,8 +50,7 @@ class PnvDrawer:
     def __init__(self, scene: QGraphicsScene, net: PetriNet):
         self.scene = scene
         self.net = net
-        self.mapper: dict[
-            Union[PetriNet.Place, PetriNet.Transition], Union[PnvQGTransitionItem, PnvQGPlaceItem]] = dict()
+        self.mapper: dict[Union[PetriNet.Place, PetriNet.Transition], Union[PnvQGTransitionItem, PnvQGPlaceItem]] = dict()
         self.status = PnvEditState()
 
     def draw_place_directly(self, x: int, y: int, r: int) -> PnvQGPlaceItem:
@@ -810,32 +809,50 @@ class PnvViewSelector(PnvToggleableComponent):
             self.__finish_selection()
 
 
-class LockButton(QPushButton):
+class EditModeButton(QPushButton):
     def __init__(self, parent: 'PnvViewer'):
         QPushButton.__init__(self, parent)
         self.__padding = 5
-        self.__edit_mode = True
+        self.__mode = PnvConfig.INSTANCE.enter_mode
         # init
-        edit: bool = PnvConfig.INSTANCE.enter_mode == PnvConfigConstants.ENTER_MODE_EDIT
-        self.set_edit_mode(edit)
+        self.set_mode(self.__mode)
         self.resize(self.sizeHint().width(), self.sizeHint().height())
 
-    def is_edit_mode(self):
-        return self.__edit_mode
+    def is_view(self):
+        return self.__mode == PnvConfigConstants.ENTER_MODE_VIEW
 
-    def set_edit_mode(self, val: bool):
-        if val:
-            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
-            self.setToolTip('Режим: редактирование')
-        else:
+    def is_explore(self):
+        return self.__mode == PnvConfigConstants.ENTER_MODE_EXPLORE
+
+    def is_mutate(self):
+        return self.__mode == PnvConfigConstants.ENTER_MODE_MUTATE
+
+    def set_mode(self, val: str):
+        if val == PnvConfigConstants.ENTER_MODE_VIEW:
             self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
-            self.setToolTip('Режим: просмотр')
-        self.__edit_mode = val
+            self.setToolTip('Режим взаимодействия: просмотр')
+        elif val == PnvConfigConstants.ENTER_MODE_EXPLORE:
+            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
+            self.setToolTip('Режим взаимодействия: интерактивный осмотр')
+        elif val == PnvConfigConstants.ENTER_MODE_MUTATE:
+            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogListView))
+            self.setToolTip('Режим взаимодействия: редактирование')
+        else:
+            val = PnvConfigConstants.ENTER_MODE_VIEW
+        self.__mode = val
         self.sync_mode()
+
+    def next(self, mode: str):
+        if mode == PnvConfigConstants.ENTER_MODE_VIEW:
+            return PnvConfigConstants.ENTER_MODE_EXPLORE
+        elif mode == PnvConfigConstants.ENTER_MODE_EXPLORE:
+            return PnvConfigConstants.ENTER_MODE_MUTATE
+        elif mode == PnvConfigConstants.ENTER_MODE_MUTATE:
+            return PnvConfigConstants.ENTER_MODE_VIEW
 
     def sync_mode(self):
         p: 'PnvViewer' = self.parent()
-        p.view_mode_change_event(self.__edit_mode)
+        p.view_mode_change_event(self.__mode)
 
     def update_pos(self):
         x = self.parent().rect().width() - self.width() - self.__padding
@@ -843,7 +860,53 @@ class LockButton(QPushButton):
         self.setGeometry(x, y, self.width(), self.height())
 
     def mousePressEvent(self, e: Optional[QtGui.QMouseEvent]) -> None:
-        self.set_edit_mode(not self.__edit_mode)
+        self.set_mode(self.next(self.__mode))
+
+
+class LabelingModeButton(QPushButton):
+    def __init__(self, parent: 'PnvViewer'):
+        QPushButton.__init__(self, parent)
+        self.__padding_x = 2 * 5 + self.sizeHint().width()
+        self.__padding_y = 5
+        self.__labeling_mode = PnvConfig.INSTANCE.labeling_mode
+        # init
+        self.set_labeling_mode(self.__labeling_mode)
+        self.resize(self.sizeHint().width(), self.sizeHint().height())
+
+    def set_labeling_mode(self, val: str):
+        if val == PnvConfigConstants.LABELING_MODE_FIXED:
+            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarNormalButton))
+            self.setToolTip('Режим ярлыков: фиксированно')
+        elif val == PnvConfigConstants.LABELING_MODE_DYNAMIC:
+            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarMaxButton))
+            self.setToolTip('Режим ярлыков: сохранять размер')
+        elif val == PnvConfigConstants.LABELING_MODE_CLOSEST:
+            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarShadeButton))
+            self.setToolTip('Режим ярлыков: отображать ближайшие')
+        else:
+            val = PnvConfigConstants.LABELING_MODE_FIXED
+        self.__labeling_mode = val
+        self.sync_labels()
+
+    def sync_labels(self):
+        p: 'PnvViewer' = self.parent()
+        p.labeling_mode_change_event(self.__labeling_mode)
+
+    def update_pos(self):
+        x = self.parent().rect().width() - self.width() - self.__padding_x
+        y = self.__padding_y
+        self.setGeometry(x, y, self.width(), self.height())
+
+    def next(self, mode: str):
+        if mode == PnvConfigConstants.LABELING_MODE_FIXED:
+            return PnvConfigConstants.LABELING_MODE_DYNAMIC
+        elif mode == PnvConfigConstants.LABELING_MODE_DYNAMIC:
+            return PnvConfigConstants.LABELING_MODE_CLOSEST
+        elif mode == PnvConfigConstants.LABELING_MODE_CLOSEST:
+            return PnvConfigConstants.LABELING_MODE_FIXED
+
+    def mousePressEvent(self, e: Optional[QtGui.QMouseEvent]) -> None:
+        self.set_labeling_mode(self.next(self.__labeling_mode))
 
 
 class PnvViewer(QGraphicsView):
@@ -853,7 +916,9 @@ class PnvViewer(QGraphicsView):
         # scale module
         self.grid_distance = 100
         self.bg_brush = Qt.QBrush(Qt.QColor(0xdadada))
+        self.bg_brush_mutate = Qt.QBrush(Qt.QColor(0xccd7e0))
         self.bg_grid_pen = Qt.QPen(Qt.QBrush(Qt.QColor(0xadadad)), 1)
+        self.bg_grid_pen_mutate = Qt.QPen(Qt.QBrush(Qt.QColor(0x1f4a80)), 1)
         self.view_scaler = PnvViewScaler(self)
         # mouse controller
         self.mouse_ctrl = PnvMouseController(self)
@@ -870,7 +935,8 @@ class PnvViewer(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
         self.horizontalScrollBar().setDisabled(True)
         self.verticalScrollBar().setDisabled(True)
-        self.btn = LockButton(self)
+        self.viewmode_btn = EditModeButton(self)
+        self.labeling_btn = LabelingModeButton(self)
         self.__context_blocked = False
 
     def wheelEvent(self, e: Optional[QtGui.QWheelEvent]) -> None:
@@ -901,7 +967,8 @@ class PnvViewer(QGraphicsView):
         super().mouseMoveEvent(e)
 
     def resizeEvent(self, event: Optional[QtGui.QResizeEvent]) -> None:
-        self.btn.update_pos()
+        self.viewmode_btn.update_pos()
+        self.labeling_btn.update_pos()
         super().resizeEvent(event)
 
     def context_menu_fire_event(self):
@@ -969,13 +1036,49 @@ class PnvViewer(QGraphicsView):
         from_, *_ = set(self.view_selector.selected_items) - {to}
         self.drawer.connect_arc(from_, to)
 
-    def view_mode_change_event(self, edit_mode: bool):
-        self.view_context_fire.set_enabled(edit_mode)
-        self.view_selector.set_enabled(edit_mode)
-        self.view_items_transformer.set_enabled(edit_mode)
-        for item in self.items():
-            if isinstance(item, (PnvQGTransitionItem, PnvQGPlaceItem)):
-                item.set_interactive(edit_mode)
+    def view_mode_change_event(self, edit_mode: str):
+        if edit_mode == PnvConfigConstants.ENTER_MODE_VIEW:
+            self.view_context_fire.set_enabled(False)
+            self.view_selector.set_enabled(False)
+            self.view_items_transformer.set_enabled(False)
+            for item in self.items():
+                if isinstance(item, (PnvQGTransitionItem, PnvQGPlaceItem)):
+                    item.set_interactive(False)
+        else:
+            self.view_selector.set_enabled(True)
+            self.view_items_transformer.set_enabled(True)
+            if edit_mode == PnvConfigConstants.ENTER_MODE_EXPLORE:
+                self.view_context_fire.set_enabled(False)
+                for item in self.items():
+                    if isinstance(item, PnvQGTransitionItem):
+                        item.set_interactive(True)
+                        item.only_wuw = True
+                    elif isinstance(item, PnvQGPlaceItem):
+                        item.set_interactive(False)
+            elif edit_mode == PnvConfigConstants.ENTER_MODE_MUTATE:
+                self.view_context_fire.set_enabled(True)
+                for item in self.items():
+                    if isinstance(item, PnvQGTransitionItem):
+                        item.set_interactive(True)
+                        item.only_wuw = False
+                    elif isinstance(item, PnvQGPlaceItem):
+                        item.set_interactive(True)
+
+        self.viewport().update()
+
+    def labeling_mode_change_event(self, mode: str):
+        if mode == PnvConfigConstants.LABELING_MODE_FIXED:
+            for item in self.items():
+                if isinstance(item, Labeling):
+                    item.set_visible(True)
+        elif mode == PnvConfigConstants.LABELING_MODE_DYNAMIC:
+            for item in self.items():
+                if isinstance(item, Labeling):
+                    item.set_visible(True)
+        elif mode == PnvConfigConstants.LABELING_MODE_CLOSEST:
+            for item in self.items():
+                if isinstance(item, Labeling):
+                    item.set_visible(False)
         self.viewport().update()
 
     def enclose_selected(self):
@@ -990,10 +1093,15 @@ class PnvViewer(QGraphicsView):
                                     icon=PnvMainWindow.WINDOW_ICON).exec()
 
     def drawBackground(self, painter: Optional[QtGui.QPainter], rect: QtCore.QRectF) -> None:
-        painter.fillRect(rect, self.bg_brush)
-        if not self.btn.is_edit_mode():
+        if self.viewmode_btn.is_view():
+            painter.fillRect(rect, self.bg_brush)
             return
-        painter.setPen(self.bg_grid_pen)
+        if self.viewmode_btn.is_explore():
+            painter.fillRect(rect, self.bg_brush)
+            painter.setPen(self.bg_grid_pen)
+        if self.viewmode_btn.is_mutate():
+            painter.fillRect(rect, self.bg_brush_mutate)
+            painter.setPen(self.bg_grid_pen_mutate)
         # grid draw
         ix, ix0 = int(rect.x()), int(rect.x() + rect.width())
         iy, iy0 = int(rect.y()), int(rect.y() + rect.height())

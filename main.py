@@ -281,7 +281,7 @@ class PnvMainWindow(QMainWindow):
             try:
                 drawer.draw_petri_net()
                 viewer.init_markings(im, fm)
-                viewer.btn.sync_mode()
+                viewer.viewmode_btn.sync_mode()
             except TypeError as te:
                 if len(te.args) == 1 and te.args[0] == PnvMainWindow.RENDER_CANCELLED:
                     return

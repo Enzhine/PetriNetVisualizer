@@ -81,7 +81,12 @@ class PnvMessageBoxes:
 
 class PnvConfigConstants:
     ENTER_MODE_VIEW = 'view'
-    ENTER_MODE_EDIT = 'edit'
+    ENTER_MODE_EXPLORE = 'explore'
+    ENTER_MODE_MUTATE = 'mutate'
+
+    LABELING_MODE_FIXED = 'fixed'
+    LABELING_MODE_DYNAMIC = 'dynamic'
+    LABELING_MODE_CLOSEST = 'closest'
 
 
 class PnvConfig:
@@ -96,6 +101,7 @@ class PnvConfig:
         self.limited_zoom_max: float = 4
         self.limited_zoom_min: float = 0.5
         self.enter_mode: str = PnvConfigConstants.ENTER_MODE_VIEW
+        self.labeling_mode: str = PnvConfigConstants.LABELING_MODE_DYNAMIC
         # folder name
         folder_name = folder_name.replace(' ', '')
         if len(folder_name) == 0:
