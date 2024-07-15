@@ -79,12 +79,23 @@ class PnvMessageBoxes:
         return acc_box_exec == QMessageBox.Yes
 
 
+class PnvConfigConstants:
+    ENTER_MODE_VIEW = 'view'
+    ENTER_MODE_EDIT = 'edit'
+
+
 class PnvConfig:
     CONFIG_FILE = "conf.json"
+    INSTANCE: 'PnvConfig' = None
 
     def __init__(self, folder_name: str):
         # default props
-        self.detailed_igraph_gen: bool = False
+        self.igraph_gen_mode: str = 'auto'
+        self.limit_translation: bool = True
+        self.limit_zoom: bool = True
+        self.limited_zoom_max: float = 4
+        self.limited_zoom_min: float = 0.5
+        self.enter_mode: str = PnvConfigConstants.ENTER_MODE_VIEW
         # folder name
         folder_name = folder_name.replace(' ', '')
         if len(folder_name) == 0:

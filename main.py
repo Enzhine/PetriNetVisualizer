@@ -46,11 +46,12 @@ class MethodsIO:
     def export_net(g: GraphData, path: str):
         if path.endswith(MethodsIO.PNML_FORMAT):
             if g.viewer.is_hierarchical_one() and \
-                    PnvMessageBoxes.is_accepted(PnvMessageBoxes.accept(f"Данная сеть является иерархической!",
+                    not PnvMessageBoxes.is_accepted(PnvMessageBoxes.accept(f"Данная сеть является иерархической!",
                                            f"Выбранный формат файла не поддерживает хранение иерархических сетей, "
                                            f"поэтому часть данных будет потеряна!",
                                            icon=PnvMainWindow.WINDOW_ICON).exec()):
-                MethodsIO.save_as_pnml(g, path)
+                return
+            MethodsIO.save_as_pnml(g, path)
         elif path.endswith(MethodsIO.EPNML_FORMAT):
             MethodsIO.save_as_epnml(g, path)
         else:
@@ -95,7 +96,7 @@ class PnvMainWindow(QMainWindow):
         PnvMainWindow.WINDOW_ICON = QtGui.QIcon('resources/pnv_icon.ico')
         # config
         try:
-            PnvMainWindow.CONFIG = PnvConfig(APP_NAME)
+            PnvConfig.INSTANCE = PnvConfig(APP_NAME)
         except Exception as ex:
             PnvMessageBoxes.warning(f'Ошибка загрузки конфигурации программы!',
                                     f'Возможно конфигурационный файл повреждён. '
@@ -103,7 +104,7 @@ class PnvMainWindow(QMainWindow):
                                     f'Сообщение об ошибке {ex.__class__.__name__}: {ex}',
                                     icon=PnvMainWindow.WINDOW_ICON).exec()
         else:
-            if not PnvMainWindow.CONFIG.status:
+            if not PnvConfig.INSTANCE.status:
                 PnvMessageBoxes.warning(f'Ошибка загрузки конфигурации программы!',
                                         f'Часть данных конфигурационного файла содержит неверный тип данных! '
                                         f'Ошибочные значения установлены по умолчанию.',
@@ -157,6 +158,8 @@ class PnvMainWindow(QMainWindow):
         self.menu_bar.addMenu(help_menu)
         help_menu.addAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation), "&О программе",
                             self.open_dev_info)
+        help_menu.addAction(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon), "&Файл конфигурации",
+                            self.open_config_file)
 
     @QtCore.pyqtSlot()
     def file_menu_update(self):
@@ -181,6 +184,10 @@ class PnvMainWindow(QMainWindow):
         wm.setMaximumWidth(128)
         wm.setWindowIcon(PnvMainWindow.WINDOW_ICON)
         wm.exec()
+
+    @QtCore.pyqtSlot()
+    def open_config_file(self):
+        os.startfile(PnvConfig.INSTANCE.file)
 
     def close_tab(self, idx: int):
         self.on_close_tab(idx, True)
@@ -227,6 +234,8 @@ class PnvMainWindow(QMainWindow):
                 if not self.on_close_tab(0, False):
                     e.ignore()
                     return
+        if PnvConfig.INSTANCE:
+            PnvConfig.INSTANCE.save()
         e.accept()
 
     def get_existing_file_path(self):

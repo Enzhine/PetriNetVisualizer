@@ -7,11 +7,12 @@ from PyQt5.QtWidgets import QGraphicsScene, QGraphicsRectItem, QGraphicsView, QA
     QStyle, QPushButton
 from pm4py import PetriNet, Marking
 from igraph import Graph
+from math import log, floor, ceil
 
 import pnv.importer.epnml
 from pnv.graphics import PnvQGTransitionItem, PnvQGPlaceItem, PnvQGArrowItem
 from pnv.importer.epnml import ExtendedTransition
-from pnv.utils import PnvMessageBoxes
+from pnv.utils import PnvMessageBoxes, PnvConfig, PnvConfigConstants
 
 Layout = Tuple[Tuple[int, int], Tuple[int, int]]
 
@@ -136,16 +137,17 @@ class PnvDrawer:
         edges = [(local_mapper[a.source], local_mapper[a.target]) for a in pn.arcs if
                  (a.source in local_mapper and a.target in local_mapper)]
         g = Graph(n_vertices, edges)
-        layout = g.layout(layout='auto')
+        layout = g.layout(layout=PnvConfig.INSTANCE.igraph_gen_mode)
         # scaling
-        b = layout.boundaries()
-        dx = b[1][0] - b[0][0]
-        dy = b[1][1] - b[0][1]
-        from main import PnvMainWindow
-        if dx > dy:
-            k = PnvMainWindow.WINDOW_MIN_WIDTH / dx
-        else:
-            k = PnvMainWindow.WINDOW_MIN_HEIGHT / dy
+        min_dist = PnvDrawer.GRAPHICS_WIDTH
+        for i, gen in enumerate(layout):
+            for j, gen1 in enumerate(layout):
+                if i == j:
+                    continue
+                x, y = gen[0], gen[1]
+                x1, y1 = gen1[0], gen1[1]
+                min_dist = min(min_dist, ((x-x1)**2 + (y-y1)**2) ** 0.5)
+        k = PnvDrawer.GRAPHICS_WIDTH / min_dist * 2
         layout.scale(k)
         # injection
         for i, gen in enumerate(layout):
@@ -514,13 +516,17 @@ class PnvViewScaler:
         self.inwards = 1.1
         self.outwards = 1 / self.inwards
 
+        self.__scale_mx = floor(log(PnvConfig.INSTANCE.limited_zoom_max, self.inwards))
+        self.__scale_mn = ceil(log(PnvConfig.INSTANCE.limited_zoom_min, self.inwards))
+        self.__limited = PnvConfig.INSTANCE.limit_zoom
+
     def wheel_event(self, e: Optional[QtGui.QWheelEvent]) -> None:
         vec = e.angleDelta().y() / 120  # Scroll delta
         # scale scene
-        if vec > 0 and self.scaler < (8 + 2):
+        if vec > 0 and ((not self.__limited) or self.scaler < self.__scale_mx):
             self.scaler += 1
             self.__viewer.scale(self.inwards, self.inwards)  # closer
-        elif vec < 0 and self.scaler > (-4 - 2):
+        elif vec < 0 and ((not self.__limited) or self.scaler > self.__scale_mn):
             self.scaler -= 1
             self.__viewer.scale(self.outwards, self.outwards)  # farther
         # scale grid
@@ -548,13 +554,18 @@ class PnvViewTransformer:
         if self.__viewer.mouse_ctrl.grabbing:
             self.__started = True
             QtGui.QGuiApplication.setOverrideCursor(Qt.Qt.ClosedHandCursor)
+            # mapping between translated and not
             delta = -self.__viewer.mouse_ctrl.delta
-            self.__viewer.horizontalScrollBar().setValue(int(self.__viewer.horizontalScrollBar().value() + delta.x()))
-            self.__viewer.verticalScrollBar().setValue(int(self.__viewer.verticalScrollBar().value() + delta.y()))
-            self.__viewer.setSceneRect(
-                self.__viewer.sceneRect().translated(delta.x(),
-                                                     delta.y())
-            )
+            k = self.__viewer.view_scaler.scale_factor()
+            sbdx = int(self.__viewer.horizontalScrollBar().value() + delta.x() * k)
+            sbdy = int(self.__viewer.verticalScrollBar().value() + delta.y() * k)
+            self.__viewer.horizontalScrollBar().setValue(sbdx)
+            self.__viewer.verticalScrollBar().setValue(sbdy)
+            # exact translation
+            if PnvConfig.INSTANCE.limit_translation:
+                self.__viewer.sceneRect().translate(delta.x(), delta.y())
+            else:
+                self.__viewer.setSceneRect(self.__viewer.sceneRect().translated(delta.x(), delta.y()))
             self.__viewer.mouse_ctrl.force_last_pos(self.__viewer.mouse_ctrl.last_pos() + delta)
         elif self.__started:
             self.__started = False
@@ -804,7 +815,9 @@ class LockButton(QPushButton):
         QPushButton.__init__(self, parent)
         self.__padding = 5
         self.__edit_mode = True
-        self.set_edit_mode(True)
+        # init
+        edit: bool = PnvConfig.INSTANCE.enter_mode == PnvConfigConstants.ENTER_MODE_EDIT
+        self.set_edit_mode(edit)
         self.resize(self.sizeHint().width(), self.sizeHint().height())
 
     def is_edit_mode(self):
