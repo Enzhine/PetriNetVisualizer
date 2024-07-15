@@ -120,7 +120,7 @@ class PnvMainWindow(QMainWindow):
 
         self.file_dialog = QFileDialog(self)
         self.file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        self.file_dialog.setNameFilters(["Petri-net file (*.pnml)", "Extended Petri-net file (*.epnml)"])
+        self.file_dialog.setNameFilter("Petri-net file (*.pnml *.epnml)")
 
     def create_stacked_wid(self):
         self.stacked_widget = QStackedWidget(self)
@@ -281,6 +281,7 @@ class PnvMainWindow(QMainWindow):
             try:
                 drawer.draw_petri_net()
                 viewer.init_markings(im, fm)
+                viewer.btn.sync_mode()
             except TypeError as te:
                 if len(te.args) == 1 and te.args[0] == PnvMainWindow.RENDER_CANCELLED:
                     return

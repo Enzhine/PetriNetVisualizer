@@ -831,6 +831,11 @@ class LockButton(QPushButton):
             self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
             self.setToolTip('Режим: просмотр')
         self.__edit_mode = val
+        self.sync_mode()
+
+    def sync_mode(self):
+        p: 'PnvViewer' = self.parent()
+        p.view_mode_change_event(self.__edit_mode)
 
     def update_pos(self):
         x = self.parent().rect().width() - self.width() - self.__padding
@@ -839,8 +844,6 @@ class LockButton(QPushButton):
 
     def mousePressEvent(self, e: Optional[QtGui.QMouseEvent]) -> None:
         self.set_edit_mode(not self.__edit_mode)
-        p: 'PnvViewer' = self.parent()
-        p.view_mode_change_event(self.__edit_mode)
 
 
 class PnvViewer(QGraphicsView):
