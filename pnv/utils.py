@@ -80,13 +80,15 @@ class PnvMessageBoxes:
 
 
 class PnvConfigConstants:
+    IGRAPH_GEN_MODE_AUTO = 'auto'
+
     ENTER_MODE_VIEW = 'view'
     ENTER_MODE_EXPLORE = 'explore'
     ENTER_MODE_MUTATE = 'mutate'
 
-    LABELING_MODE_FIXED = 'fixed'
-    LABELING_MODE_DYNAMIC = 'dynamic'
-    LABELING_MODE_CLOSEST = 'closest'
+    LABELING_MODE_MIXED = 'mixed'
+    LABELING_MODE_CONTRAST = 'contrast'
+    LABELING_MODE_OVERLAP = 'overlap'
 
 
 class PnvConfig:
@@ -95,13 +97,16 @@ class PnvConfig:
 
     def __init__(self, folder_name: str):
         # default props
-        self.igraph_gen_mode: str = 'auto'
+        self.igraph_gen_mode: str = PnvConfigConstants.IGRAPH_GEN_MODE_AUTO
         self.limit_translation: bool = True
         self.limit_zoom: bool = True
         self.limited_zoom_max: float = 4
         self.limited_zoom_min: float = 0.5
         self.enter_mode: str = PnvConfigConstants.ENTER_MODE_VIEW
-        self.labeling_mode: str = PnvConfigConstants.LABELING_MODE_DYNAMIC
+        self.labeling_mode: str = PnvConfigConstants.LABELING_MODE_MIXED
+        self.text_font_family: str = 'Arial font'
+        self.text_font_size: int = 10
+        self.text_font_weight: int = 2
         # folder name
         folder_name = folder_name.replace(' ', '')
         if len(folder_name) == 0:

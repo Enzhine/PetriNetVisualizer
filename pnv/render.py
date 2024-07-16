@@ -874,17 +874,17 @@ class LabelingModeButton(QPushButton):
         self.resize(self.sizeHint().width(), self.sizeHint().height())
 
     def set_labeling_mode(self, val: str):
-        if val == PnvConfigConstants.LABELING_MODE_FIXED:
+        if val == PnvConfigConstants.LABELING_MODE_MIXED:
             self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarNormalButton))
-            self.setToolTip('Режим ярлыков: фиксированно')
-        elif val == PnvConfigConstants.LABELING_MODE_DYNAMIC:
+            self.setToolTip('Режим ярлыков: смешано')
+        elif val == PnvConfigConstants.LABELING_MODE_CONTRAST:
             self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarMaxButton))
-            self.setToolTip('Режим ярлыков: сохранять размер')
-        elif val == PnvConfigConstants.LABELING_MODE_CLOSEST:
+            self.setToolTip('Режим ярлыков: контрастно')
+        elif val == PnvConfigConstants.LABELING_MODE_OVERLAP:
             self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarShadeButton))
-            self.setToolTip('Режим ярлыков: отображать ближайшие')
+            self.setToolTip('Режим ярлыков: перекрывать')
         else:
-            val = PnvConfigConstants.LABELING_MODE_FIXED
+            val = PnvConfigConstants.LABELING_MODE_MIXED
         self.__labeling_mode = val
         self.sync_labels()
 
@@ -898,15 +898,18 @@ class LabelingModeButton(QPushButton):
         self.setGeometry(x, y, self.width(), self.height())
 
     def next(self, mode: str):
-        if mode == PnvConfigConstants.LABELING_MODE_FIXED:
-            return PnvConfigConstants.LABELING_MODE_DYNAMIC
-        elif mode == PnvConfigConstants.LABELING_MODE_DYNAMIC:
-            return PnvConfigConstants.LABELING_MODE_CLOSEST
-        elif mode == PnvConfigConstants.LABELING_MODE_CLOSEST:
-            return PnvConfigConstants.LABELING_MODE_FIXED
+        if mode == PnvConfigConstants.LABELING_MODE_MIXED:
+            return PnvConfigConstants.LABELING_MODE_CONTRAST
+        elif mode == PnvConfigConstants.LABELING_MODE_CONTRAST:
+            return PnvConfigConstants.LABELING_MODE_OVERLAP
+        elif mode == PnvConfigConstants.LABELING_MODE_OVERLAP:
+            return PnvConfigConstants.LABELING_MODE_MIXED
 
     def mousePressEvent(self, e: Optional[QtGui.QMouseEvent]) -> None:
         self.set_labeling_mode(self.next(self.__labeling_mode))
+
+
+#class ItemsDisplay
 
 
 class PnvViewer(QGraphicsView):
@@ -1041,44 +1044,52 @@ class PnvViewer(QGraphicsView):
             self.view_context_fire.set_enabled(False)
             self.view_selector.set_enabled(False)
             self.view_items_transformer.set_enabled(False)
+            self.scene().setBackgroundBrush(self.bg_brush)
             for item in self.items():
-                if isinstance(item, (PnvQGTransitionItem, PnvQGPlaceItem)):
+                if isinstance(item, PnvQGTransitionItem):
+                    item.set_interactive(False)
+                    item.sync_labeling()
+                elif isinstance(item, PnvQGPlaceItem):
                     item.set_interactive(False)
         else:
             self.view_selector.set_enabled(True)
             self.view_items_transformer.set_enabled(True)
             if edit_mode == PnvConfigConstants.ENTER_MODE_EXPLORE:
                 self.view_context_fire.set_enabled(False)
+                self.scene().setBackgroundBrush(self.bg_brush)
                 for item in self.items():
                     if isinstance(item, PnvQGTransitionItem):
                         item.set_interactive(True)
                         item.only_wuw = True
+                        item.sync_labeling()
                     elif isinstance(item, PnvQGPlaceItem):
                         item.set_interactive(False)
             elif edit_mode == PnvConfigConstants.ENTER_MODE_MUTATE:
                 self.view_context_fire.set_enabled(True)
+                self.scene().setBackgroundBrush(self.bg_brush_mutate)
                 for item in self.items():
                     if isinstance(item, PnvQGTransitionItem):
                         item.set_interactive(True)
                         item.only_wuw = False
+                        item.sync_labeling()
                     elif isinstance(item, PnvQGPlaceItem):
                         item.set_interactive(True)
 
         self.viewport().update()
 
     def labeling_mode_change_event(self, mode: str):
-        if mode == PnvConfigConstants.LABELING_MODE_FIXED:
+        if mode == PnvConfigConstants.LABELING_MODE_MIXED:
             for item in self.items():
                 if isinstance(item, Labeling):
-                    item.set_visible(True)
-        elif mode == PnvConfigConstants.LABELING_MODE_DYNAMIC:
+                    item.reset_label_effects()
+        elif mode == PnvConfigConstants.LABELING_MODE_CONTRAST:
             for item in self.items():
                 if isinstance(item, Labeling):
-                    item.set_visible(True)
-        elif mode == PnvConfigConstants.LABELING_MODE_CLOSEST:
+                    item.enable_label_outline()
+        elif mode == PnvConfigConstants.LABELING_MODE_OVERLAP:
             for item in self.items():
                 if isinstance(item, Labeling):
-                    item.set_visible(False)
+                    item.enable_bg_overlap()
         self.viewport().update()
 
     def enclose_selected(self):
@@ -1093,14 +1104,12 @@ class PnvViewer(QGraphicsView):
                                     icon=PnvMainWindow.WINDOW_ICON).exec()
 
     def drawBackground(self, painter: Optional[QtGui.QPainter], rect: QtCore.QRectF) -> None:
+        painter.fillRect(rect, self.scene().backgroundBrush())
         if self.viewmode_btn.is_view():
-            painter.fillRect(rect, self.bg_brush)
             return
         if self.viewmode_btn.is_explore():
-            painter.fillRect(rect, self.bg_brush)
             painter.setPen(self.bg_grid_pen)
         if self.viewmode_btn.is_mutate():
-            painter.fillRect(rect, self.bg_brush_mutate)
             painter.setPen(self.bg_grid_pen_mutate)
         # grid draw
         ix, ix0 = int(rect.x()), int(rect.x() + rect.width())

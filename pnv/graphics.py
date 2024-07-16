@@ -1,8 +1,8 @@
 from typing import Union, Optional
 
 from PyQt5 import QtGui, QtCore, QtWidgets
-from PyQt5.QtCore import QRectF
-from PyQt5.QtGui import QBrush, QColor
+from PyQt5.QtCore import QRectF, QRect
+from PyQt5.QtGui import QBrush, QColor, QTextCursor, QTextCharFormat
 from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsSceneContextMenuEvent, \
     QGraphicsSceneHoverEvent, QStyleOptionGraphicsItem, QWidget, QGraphicsRectItem, QMenu, QStyle, \
     QGraphicsLineItem, QGraphicsItem, QAbstractGraphicsShapeItem, QGraphicsTextItem
@@ -11,13 +11,15 @@ import numpy as np
 from pm4py import PetriNet
 
 import pnv.importer.epnml
-from pnv.utils import PnvMessageBoxes
+from pnv.utils import PnvMessageBoxes, PnvConfig
 
 
 class Labeling:
     def __init__(self):
         self.__text_obj: Union[QGraphicsTextItem, None] = None
         self.__text: str = None
+
+        self.__bg_overlap = False
 
     def _instance(self) -> Union['PnvQGTransitionItem', 'PnvQGPlaceItem']:
         raise NotImplementedError()
@@ -38,8 +40,40 @@ class Labeling:
         y -= obj.y() + int(obj.rect().y()) - h
         return x, y
 
+    def reset_label_effects(self):
+        _format = QTextCharFormat()
+
+        cursor = QTextCursor(self.__text_obj.document())
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.setCharFormat(_format)
+
+        self.__bg_overlap = False
+
+    def enable_label_outline(self):
+        _format = QTextCharFormat()
+        _format.setTextOutline(QtGui.QPen(QtGui.QColor('white'), 0.5))
+
+        cursor = QTextCursor(self.__text_obj.document())
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.setCharFormat(_format)
+
+    def update(self):
+        if self.__bg_overlap:
+            self.enable_bg_overlap()
+
+    def enable_bg_overlap(self):
+        self.__bg_overlap = True
+        _format = QTextCharFormat()
+        _format.setBackground(self.__text_obj.scene().backgroundBrush())
+
+        cursor = QTextCursor(self.__text_obj.document())
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.setCharFormat(_format)
+
     def __add_label(self, label: str, offset: tuple[float, float]):
-        text = self._instance().scene().addText(label)
+        text = self._instance().scene().addText(label, QtGui.QFont(PnvConfig.INSTANCE.text_font_family,
+                                                                   PnvConfig.INSTANCE.text_font_size,
+                                                                   PnvConfig.INSTANCE.text_font_weight))
         self.__text = label
 
         w = QtGui.QFontMetrics(text.font()).width(label)
@@ -52,6 +86,7 @@ class Labeling:
         text.setPos(QtCore.QPointF(x - w / 2, y + h))
         text.setParentItem(self._instance())
         text.setAcceptHoverEvents(False)
+        text.setZValue(1)
         self.__text_obj = text
 
     def set_label(self, label: str, offset: tuple[float, float] = (0, 0)):
@@ -425,6 +460,9 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Label
                                     f"{ex}",
                                     icon=PnvMainWindow.WINDOW_ICON).exec()
 
+    def sync_labeling(self):
+        Labeling.update(self)
+
 
 class PnvQGArrowItem(QGraphicsLineItem):
     def __init__(self, from_, to):
@@ -436,8 +474,10 @@ class PnvQGArrowItem(QGraphicsLineItem):
         self._x2: float = 0
         self._y2: float = 0
         QGraphicsLineItem.__init__(self, line)
-        self.setPen(QtGui.QPen(QtGui.QColor('black'), 3))
+        self.setPen(QtGui.QPen(QtGui.QColor(0x000000), 3))
         self.dead = False
+
+        self.setZValue(-1)
 
     def from_point(self) -> tuple[float, float]:
         return self.from_.rect().x() + self.from_.x(), self.from_.rect().y() + self.from_.y()
