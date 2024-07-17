@@ -11,7 +11,8 @@ import numpy as np
 from pm4py import PetriNet
 
 import pnv.importer.epnml
-from pnv.utils import PnvMessageBoxes, PnvConfig
+from pnv.interactive.hierarchy import Hierarchical, HierNode
+from pnv.utils import PnvMessageBoxes, PnvConfig, PnvConfigConstants
 
 
 class Labeling:
@@ -40,35 +41,46 @@ class Labeling:
         y -= obj.y() + int(obj.rect().y()) - h
         return x, y
 
-    def reset_label_effects(self):
+    @staticmethod
+    def reset_any_label_effects(txt: QGraphicsTextItem):
         _format = QTextCharFormat()
 
-        cursor = QTextCursor(self.__text_obj.document())
+        cursor = QTextCursor(txt.document())
         cursor.select(QTextCursor.SelectionType.Document)
         cursor.setCharFormat(_format)
 
+    def reset_label_effects(self):
+        Labeling.reset_any_label_effects(self.__text_obj)
         self.__bg_overlap = False
 
-    def enable_label_outline(self):
+    @staticmethod
+    def enable_any_label_outline(txt: QGraphicsTextItem):
         _format = QTextCharFormat()
         _format.setTextOutline(QtGui.QPen(QtGui.QColor('white'), 0.5))
 
-        cursor = QTextCursor(self.__text_obj.document())
+        cursor = QTextCursor(txt.document())
         cursor.select(QTextCursor.SelectionType.Document)
         cursor.setCharFormat(_format)
+
+    def enable_label_outline(self):
+        Labeling.enable_any_label_outline(self.__text_obj)
+
+    @staticmethod
+    def enable_any_bg_overlap(txt: QGraphicsTextItem):
+        _format = QTextCharFormat()
+        _format.setBackground(txt.scene().backgroundBrush())
+
+        cursor = QTextCursor(txt.document())
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.setCharFormat(_format)
+
+    def enable_bg_overlap(self):
+        self.__bg_overlap = True
+        Labeling.enable_any_bg_overlap(self.__text_obj)
 
     def update(self):
         if self.__bg_overlap:
             self.enable_bg_overlap()
-
-    def enable_bg_overlap(self):
-        self.__bg_overlap = True
-        _format = QTextCharFormat()
-        _format.setBackground(self.__text_obj.scene().backgroundBrush())
-
-        cursor = QTextCursor(self.__text_obj.document())
-        cursor.select(QTextCursor.SelectionType.Document)
-        cursor.setCharFormat(_format)
 
     def __add_label(self, label: str, offset: tuple[float, float]):
         text = self._instance().scene().addText(label, QtGui.QFont(PnvConfig.INSTANCE.text_font_family,
@@ -86,7 +98,7 @@ class Labeling:
         text.setPos(QtCore.QPointF(x - w / 2, y + h))
         text.setParentItem(self._instance())
         text.setAcceptHoverEvents(False)
-        text.setZValue(1)
+        text.setZValue(2)
         self.__text_obj = text
 
     def set_label(self, label: str, offset: tuple[float, float] = (0, 0)):
@@ -208,21 +220,33 @@ class PnvInteractive:
         self.manual_update()
 
 
-class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Markable):
+class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Hierarchical, Markable):
     def __init__(self, *args, **kwargs):
         PetriNetBind.__init__(self)
+        Hierarchical.__init__(self)
         QGraphicsEllipseItem.__init__(self, *args, **kwargs)  # Universal constructor bypass
         PnvInteractive.__init__(self)
         Markable.__init__(self)
         #
         self.setPen(QtGui.QPen(QtGui.QColor('black'), 3))
-        self.setBrush(QtGui.QBrush(QtGui.QColor('white')))
+        _col = QtGui.QColor('white')
+        self.setBrush(QtGui.QBrush(_col))
+        self.set_hovered_brush(QtGui.QBrush(_col.darker(125)))
 
-        self.set_hovered_brush(QtGui.QBrush(QtGui.QColor('lightGray')))
         self.set_selected_brush(QtGui.QBrush(QtGui.QColor(0xafadff)))
         # arrows holder
         self.__arrows: set[PnvQGArrowItem] = set()
+        self.only_review = False
         self.drawer = None
+        self.setZValue(1)
+
+    def hiernode_bind(self, obj: HierNode):
+        _lvl = obj.level()
+        if _lvl != 0:
+            new_col = QtGui.QColor(PnvConfigConstants.color_at(_lvl - 1))
+            self.setBrush(QtGui.QBrush(new_col))
+            self.set_hovered_brush(new_col.darker(125))
+        super().hiernode_bind(obj)
 
     def arrows(self) -> set['PnvQGArrowItem']:
         return self.__arrows
@@ -335,8 +359,16 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Markabl
             return
         if not self.petri_net_bound():
             return
+        if self.only_review:
+            if self.hiernode_bound().level() == 0:
+                return
+            cmenu = QMenu(self.scene().parent())
+            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown),
+                            '&Свернуть подсеть', self.close_subnet)
+            cmenu.exec(event.screenPos())
+            super(PnvQGPlaceItem, self).contextMenuEvent(event)
+            return
         cmenu = QMenu(self.scene().parent())
-
         if not self.final:
             cmenu.addAction('&Назначить фишки', lambda: self._ctxt_update_tokens())
             cmenu.addAction('&Отметить конечной', lambda: self._ctxt_update_fin(True))
@@ -348,26 +380,45 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Markabl
         cmenu.exec(event.screenPos())
         super(PnvQGPlaceItem, self).contextMenuEvent(event)
 
+    def close_subnet(self):
+        self.drawer.subnet_wrap({self})
+
     def remove_item(self):
         self.drawer.place_remove(self)
 
+    def sync_with_mode(self, edit_mode=None, label_mode=None):
+        if edit_mode:
+            if edit_mode == PnvConfigConstants.ENTER_MODE_VIEW:
+                self.set_interactive(False)
+                self.only_review = True
+            elif edit_mode == PnvConfigConstants.ENTER_MODE_EXPLORE:
+                self.set_interactive(True)
+                self.only_review = True
+            elif edit_mode == PnvConfigConstants.ENTER_MODE_MUTATE:
+                self.set_interactive(True)
+                self.only_review = False
 
-class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Labeling):
+
+class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Hierarchical, Labeling):
 
     def __init__(self, *args, **kwargs):
         PetriNetBind.__init__(self)
+        Hierarchical.__init__(self)
         QGraphicsRectItem.__init__(self, *args, *kwargs)  # Universal constructor bypass
         PnvInteractive.__init__(self)
         Labeling.__init__(self)
         # arrows holder
         self.setPen(QtGui.QPen(QtGui.QColor('black'), 3))
-        self.setBrush(QtGui.QBrush(QtGui.QColor('white')))
-        self.set_hovered_brush(QtGui.QBrush(QtGui.QColor('lightGray')))
+        _col = QtGui.QColor('white')
+        self.setBrush(QtGui.QBrush(_col))
+        self.set_hovered_brush(QtGui.QBrush(_col.darker(125)))
+
         self.set_selected_brush(QtGui.QBrush(QtGui.QColor(0xafafff)))
         #
         self.__arrows: set[PnvQGArrowItem] = set()
-        self.only_wuw = False
+        self.only_review = False
         self.drawer = None
+        self.setZValue(1)
 
     def _instance(self) -> QAbstractGraphicsShapeItem:
         return self
@@ -400,6 +451,14 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Label
         painter.setBrush(self.brush())
         painter.drawRect(self.rect())
 
+    def hiernode_bind(self, obj: HierNode):
+        _lvl = obj.level()
+        if _lvl != 0:
+            new_col = QtGui.QColor(PnvConfigConstants.color_at(_lvl - 1))
+            self.setBrush(QtGui.QBrush(new_col))
+            self.set_hovered_brush(QtGui.QBrush(new_col.darker(125)))
+        super().hiernode_bind(obj)
+
     def petri_net_bind(self, obj: Union[PetriNet.Place, PetriNet.Transition]):
         if isinstance(obj, pnv.importer.epnml.ExtendedTransition):
             self.setPen(QtGui.QPen(QtGui.QColor('black'), 3, QtCore.Qt.PenStyle.DashLine))
@@ -427,12 +486,17 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Label
             return
         trans: PetriNet.Transition = self.petri_net_bound()
         # special mode
-        if self.only_wuw:
-            if not isinstance(trans, pnv.importer.epnml.ExtendedTransition):
+        if self.only_review:
+            if not isinstance(trans, pnv.importer.epnml.ExtendedTransition) and self.hiernode_bound().level() == 0:
                 return
             cmenu = QMenu(self.scene().parent())
-            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp),
-                            '&Раскрыть подсеть', self.open_subnet)
+            if isinstance(trans, pnv.importer.epnml.ExtendedTransition):
+                cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp),
+                                '&Развернуть подсеть', self.open_subnet)
+                cmenu.addSeparator()
+            if self.hiernode_bound().level() != 0:
+                cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown),
+                                '&Свернуть подсеть', self.close_subnet)
             cmenu.exec(event.screenPos())
             super(PnvQGTransitionItem, self).contextMenuEvent(event)
             return
@@ -460,7 +524,32 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Label
                                     f"{ex}",
                                     icon=PnvMainWindow.WINDOW_ICON).exec()
 
+    def close_subnet(self):
+        self.drawer.subnet_wrap({self})
+
     def sync_labeling(self):
+        Labeling.update(self)
+
+    def sync_with_mode(self, edit_mode=None, label_mode=None):
+        if edit_mode:
+            if edit_mode == PnvConfigConstants.ENTER_MODE_VIEW:
+                self.set_interactive(False)
+            else:
+                if edit_mode == PnvConfigConstants.ENTER_MODE_EXPLORE:
+                    self.set_interactive(True)
+                    self.only_review = True
+                elif edit_mode == PnvConfigConstants.ENTER_MODE_MUTATE:
+                    self.set_interactive(True)
+                    self.only_review = False
+
+        if label_mode:
+            if label_mode == PnvConfigConstants.LABELING_MODE_MIXED:
+                self.reset_label_effects()
+            elif label_mode == PnvConfigConstants.LABELING_MODE_CONTRAST:
+                self.enable_label_outline()
+            elif label_mode == PnvConfigConstants.LABELING_MODE_OVERLAP:
+                self.enable_bg_overlap()
+
         Labeling.update(self)
 
 

@@ -4,7 +4,7 @@ from typing import Union, Optional, Tuple
 from PyQt5 import Qt, QtCore, QtGui
 from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsRectItem, QGraphicsView, QApplication, QMenu, \
-    QStyle, QPushButton
+    QStyle, QPushButton, QGraphicsItem
 from pm4py import PetriNet, Marking
 from igraph import Graph
 from math import log, floor, ceil
@@ -12,6 +12,7 @@ from math import log, floor, ceil
 import pnv.importer.epnml
 from pnv.graphics import PnvQGTransitionItem, PnvQGPlaceItem, PnvQGArrowItem, Labeling
 from pnv.importer.epnml import ExtendedTransition
+from pnv.interactive.hierarchy import HierNode, Hierarchical
 from pnv.utils import PnvMessageBoxes, PnvConfig, PnvConfigConstants
 
 Layout = Tuple[Tuple[int, int], Tuple[int, int]]
@@ -50,8 +51,31 @@ class PnvDrawer:
     def __init__(self, scene: QGraphicsScene, net: PetriNet):
         self.scene = scene
         self.net = net
-        self.mapper: dict[Union[PetriNet.Place, PetriNet.Transition], Union[PnvQGTransitionItem, PnvQGPlaceItem]] = dict()
+        self.mapper: dict[
+            Union[PetriNet.Place, PetriNet.Transition], Union[PnvQGTransitionItem, PnvQGPlaceItem]] = dict()
         self.status = PnvEditState()
+
+        self.edit_mode = None
+        self.label_mode = None
+
+        self.__cached_htree: HierNode = None
+        if self.is_review_mode():
+            self.__cached_htree = self.__make_htree()
+
+    def is_review_mode(self):
+        return PnvConfig.INSTANCE.global_mode == PnvConfigConstants.GLOBAL_MODE_REVIEW
+
+    def __make_htree(self, root: tuple[HierNode, ExtendedTransition] = None):
+        if root:
+            rhn, rt = root
+            hn = HierNode(rt.name, rhn, (rt, rt.inner_net, None))
+        else:
+            hn = HierNode('root', None, (None, self.net, None))
+        _net = hn.value[1]
+        for t in _net.transitions:
+            if isinstance(t, ExtendedTransition):
+                self.__make_htree((hn, t))
+        return hn
 
     def draw_place_directly(self, x: int, y: int, r: int) -> PnvQGPlaceItem:
         # custom ellipse init
@@ -71,6 +95,7 @@ class PnvDrawer:
         obj = self.draw_place_directly(*pos, shape[0])
         obj.drawer = self
         obj.petri_net_bind(p)
+        obj.sync_with_mode(self.edit_mode, self.label_mode)
         return obj
 
     def draw_transition(self, t: PetriNet.Transition) -> PnvQGTransitionItem:
@@ -78,6 +103,7 @@ class PnvDrawer:
         obj = self.draw_transition_directly(*pos, *shape, t.label)
         obj.drawer = self
         obj.petri_net_bind(t)
+        obj.sync_with_mode(self.edit_mode, self.label_mode)
         return obj
 
     def draw_arc(self, from_: Union[PetriNet.Place, PetriNet.Transition],
@@ -111,14 +137,25 @@ class PnvDrawer:
                                     f"Будет произведена генерация автоматической разметки.",
                                     icon=PnvMainWindow.WINDOW_ICON).exec()
             self.igraph_gen_layout(self.net)
+        lst = []
         for p in self.net.places:
-            self.mapper[p] = self.draw_place(p)
+            obj = self.draw_place(p)
+            if self.is_review_mode():
+                obj.hiernode_bind(self.__cached_htree)
+                lst.append(obj)
+            self.mapper[p] = obj
         for t in self.net.transitions:
-            self.mapper[t] = self.draw_transition(t)
+            obj = self.draw_transition(t)
+            if self.is_review_mode():
+                obj.hiernode_bind(self.__cached_htree)
+                lst.append(obj)
+            self.mapper[t] = obj
         for a in self.net.arcs:
             obj = self.draw_arc(a.source, a.target)
             self.mapper[a.source].arrows().add(obj)
             self.mapper[a.target].arrows().add(obj)
+        if self.is_review_mode():
+            self.__cached_htree.value = (None, self.net, lst)
 
     def igraph_gen_layout(self, pn: PetriNet):
         n_vertices = len(pn.places) + len(pn.transitions)
@@ -145,7 +182,7 @@ class PnvDrawer:
                     continue
                 x, y = gen[0], gen[1]
                 x1, y1 = gen1[0], gen1[1]
-                min_dist = min(min_dist, ((x-x1)**2 + (y-y1)**2) ** 0.5)
+                min_dist = min(min_dist, ((x - x1) ** 2 + (y - y1) ** 2) ** 0.5)
         k = PnvDrawer.GRAPHICS_WIDTH / min_dist * 2
         layout.scale(k)
         # injection
@@ -292,6 +329,123 @@ class PnvDrawer:
                 raise pnv.importer.epnml.EPNMLException(
                     f'Inner Petri net intersects with outer Petri net (Outer arc): {a}!')
 
+        if self.is_review_mode():
+            self.subnet_unwrap_review(trans_obj)
+        else:
+            self.subnet_unwrap_mutate(trans_obj)
+
+    def subnet_unwrap_review(self, trans_obj: PnvQGTransitionItem):
+        top = trans_obj.hiernode_bound()
+        extr: ExtendedTransition = trans_obj.petri_net_bound()
+
+        hn = None
+        for c in top.children():
+            if c.value[0] is extr:
+                hn = c
+
+        extr, wrapped_net, _ = hn.value
+        extr: ExtendedTransition
+        wrapped_net: PetriNet
+
+        # cutting old components
+        # # gui arcs remove
+        for arrow in trans_obj.arrows():
+            if arrow.from_ is trans_obj:
+                # target is outer
+                arrow.to.arrows().remove(arrow)
+            elif arrow.to is trans_obj:
+                # source is outer
+                arrow.from_.arrows().remove(arrow)
+            arrow.hide()
+            self.scene.removeItem(arrow)  # delete from gui
+        # #  gui transition remove
+        self.scene.removeItem(trans_obj)
+        top.value[2].remove(trans_obj)
+
+        # injecting wrapped net
+        # # layout gen
+        if not all(self.has_layout(obj) for obj in [*wrapped_net.places, *wrapped_net.transitions]):
+            self.igraph_gen_layout(wrapped_net)
+
+        lst = []
+        # # places inject
+        for p in wrapped_net.places:
+            # gui
+            obj = self.draw_place(p)
+            obj.hiernode_bind(hn)
+            lst.append(obj)
+            self.mapper[p] = obj
+        # # transitions inject
+        for t in wrapped_net.transitions:
+            # gui
+            obj = self.draw_transition(t)
+            obj.hiernode_bind(hn)
+            lst.append(obj)
+            self.mapper[t] = obj
+        # # arcs inject
+        for a in wrapped_net.arcs:
+            # gui
+            obj = self.draw_arc(a.source, a.target)
+            obj.to.arrows().add(obj)
+            obj.from_.arrows().add(obj)
+
+        hn.value = (extr, wrapped_net, lst, self.__make_hv_cover(lst, hn))
+        self.hv_cover_sync(hn.parent)
+        # overall scene update
+        self.scene.update()
+
+    @staticmethod
+    def bounds(lst: list[Union[PnvQGTransitionItem, PnvQGPlaceItem]]):
+        minx, miny, maxx, maxy = 10 ** 10, 10 ** 10, -10 ** 9, -10 ** 9
+        for e in lst:
+            x, y = PnvDrawer.final_pos(e)
+            minx = min(minx, x)
+            miny = min(miny, y)
+            maxx = max(maxx, x)
+            maxy = max(maxy, y)
+        return minx, miny, maxx, maxy
+
+    def hv_cover_sync(self, root=None):
+        if root is None:
+            root = self.__cached_htree
+        for n in root.children():
+            if len(n.value) < 4 or n.value[3] is None:
+                continue
+            cover = n.value[3]
+            txt, *_ = cover.childItems()
+            if self.label_mode == PnvConfigConstants.LABELING_MODE_MIXED:
+                Labeling.reset_any_label_effects(txt)
+            elif self.label_mode == PnvConfigConstants.LABELING_MODE_CONTRAST:
+                Labeling.enable_any_label_outline(txt)
+            elif self.label_mode == PnvConfigConstants.LABELING_MODE_OVERLAP:
+                Labeling.enable_any_bg_overlap(txt)
+            self.hv_cover_sync(n)
+
+    def __make_hv_cover(self, lst: list[Union[PnvQGTransitionItem, PnvQGPlaceItem]], hn: HierNode):
+        minx, miny, maxx, maxy = PnvDrawer.bounds(lst)
+        padding = PnvDrawer.GRAPHICS_WIDTH
+        new_col = QtGui.QColor(PnvConfigConstants.color_at(hn.level() - 1)).darker(125)
+
+        _hv_txt = self.scene.addText(hn.name,
+                                     QtGui.QFont(PnvConfig.INSTANCE.text_font_family,
+                                                 PnvConfig.INSTANCE.text_font_size,
+                                                 PnvConfig.INSTANCE.text_font_weight))
+        padding_top = QtGui.QFontMetrics(_hv_txt.font()).height() + padding
+        _hv_cover = self.scene.addRect(
+            Qt.QRectF(minx - padding, miny - padding_top, maxx - minx + 2 * padding, maxy - miny + 3 * padding),
+            Qt.QPen(new_col, 2, Qt.Qt.DashLine))
+        _hv_txt.setPos(minx - padding, miny - padding_top)
+        _hv_txt.setDefaultTextColor(new_col)
+        _hv_txt.setParentItem(_hv_cover)
+        _hv_txt.setZValue(2)
+        _hv_cover.setZValue(0)
+
+        return _hv_cover
+
+    def subnet_unwrap_mutate(self, trans_obj: PnvQGTransitionItem):
+        extr: ExtendedTransition = trans_obj.petri_net_bound()
+        wrapped_net = extr.inner_net
+
         # cutting old components
         # # gui arcs remove
         for arrow in trans_obj.arrows():
@@ -352,8 +506,91 @@ class PnvDrawer:
     def subnet_wrap(self, objs: set[Union[PnvQGTransitionItem, PnvQGPlaceItem]]):
         # wrappability verification
         if len(objs) <= 1:
-            raise pnv.importer.epnml.EPNMLException('Attempt to wrap empty or single-object net!')
+            if not self.is_review_mode():
+                raise pnv.importer.epnml.EPNMLException('Attempt to wrap empty or single-object net!')
+            obj, *_ = objs
+            self.subnet_wrap_review(obj)
+            return
 
+        self.subnet_wrap_mutate(objs)
+
+    def subnet_wrap_review(self, obj: Union[PnvQGTransitionItem, PnvQGPlaceItem]):
+        hn = obj.hiernode_bound()
+        extr, _net, objs, cover = hn.value
+
+        cover.hide()
+        self.scene.removeItem(cover)
+
+        # define outer objs
+        outer_to_objs = set()
+        outer_from_objs = set()
+        total_arrows: set[PnvQGArrowItem] = set().union(*[obj.arrows() for obj in objs])  # all arrows
+        for arrow in total_arrows:
+            if not (arrow.to in objs):
+                outer_to_objs.add(arrow.to)
+            elif not (arrow.from_ in objs):
+                outer_from_objs.add(arrow.from_)
+
+        # future transition place
+        min_bx = 10**10
+        min_by = 10**10
+        max_bx = -10**9
+        max_by = -10**9
+        for o in objs:
+            x, y = PnvDrawer.final_pos(o)
+            min_bx = min(min_bx, x)
+            min_by = min(min_by, y)
+            max_bx = max(max_bx, x)
+            max_by = max(max_by, y)
+        objs_center = (min_bx + (max_bx - min_bx) / 2, min_by + (max_by - min_by) / 2)
+
+        # creating wrapped net
+        for obj in objs:
+            bound = obj.petri_net_bound()
+            # updating layout
+            lay = PnvDrawer.layout(bound)
+            lay = (PnvDrawer.final_pos(obj), lay[1])
+            bound.properties['layout_information_petri'] = lay
+
+        # cutting old components
+        # # gui arcs remove
+        for arrow in total_arrows:
+            for obj in outer_to_objs:
+                if arrow in obj.arrows():
+                    obj.arrows().remove(arrow)
+            for obj in outer_from_objs:
+                if arrow in obj.arrows():
+                    obj.arrows().remove(arrow)
+            arrow.hide()
+            self.scene.removeItem(arrow)
+        # # gui places and transitions remove
+        for obj in objs:
+            del self.mapper[obj.petri_net_bound()]
+            self.scene.removeItem(obj)
+
+        # adding new objects
+        extr.properties['layout_information_petri'] = (objs_center, (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
+        # # gui
+        obj = self.draw_transition(extr)
+        obj.hiernode_bind(hn.parent)
+        hn.parent.value[2].append(obj)
+        self.mapper[extr] = obj
+        for obj in outer_to_objs:
+            bound = obj.petri_net_bound()
+            arrow = self.draw_arc(extr, bound)
+            arrow.to.arrows().add(arrow)
+            arrow.from_.arrows().add(arrow)
+        for obj in outer_from_objs:
+            bound = obj.petri_net_bound()
+            arrow = self.draw_arc(bound, extr)
+            arrow.to.arrows().add(arrow)
+            arrow.from_.arrows().add(arrow)
+
+        # overall scene update
+        hn.value = (extr, _net, None)
+        self.scene.update()
+
+    def subnet_wrap_mutate(self, objs: set[Union[PnvQGTransitionItem, PnvQGPlaceItem]]):
         # define outer objs
         outer_to_objs = set()
         outer_from_objs = set()
@@ -611,6 +848,65 @@ class PnvItemsTransformer(PnvToggleableComponent):
         self.moving = False
         self.__start_pos = None  # transform started mark
 
+    def __update_hn_cover(self):
+        if not self.__viewer.drawer.is_review_mode():
+            return
+        obj, *_ = self.__viewer.view_selector.selected_items
+        obj: Hierarchical
+        if len(obj.hiernode_bound().value) < 4:
+            return
+        hn = obj.hiernode_bound()
+        _, _, lst, cover = hn.value
+
+        cover: QGraphicsRectItem
+        minx, miny, maxx, maxy = PnvDrawer.bounds(lst)
+        for c in hn.children():
+            c: HierNode
+            if len(c.value) < 4 or c.value[3] is None:
+                continue
+            _, _, _, c_cover = c.value
+            c_cover: QGraphicsRectItem
+            minx = min(minx, c_cover.rect().x())
+            miny = min(miny, c_cover.rect().y())
+            c_maxx = c_cover.rect().x() + c_cover.rect().width()
+            c_maxy = c_cover.rect().y() + c_cover.rect().height()
+            maxx = max(maxx, c_maxx)
+            maxy = max(maxy, c_maxy)
+        padding = PnvDrawer.GRAPHICS_WIDTH
+        txt, *_ = cover.childItems()
+        padding_top = QtGui.QFontMetrics(txt.font()).height() + padding
+        cover.setRect(Qt.QRectF(minx - padding, miny - padding_top, maxx - minx + 2 * padding, maxy - miny + 3 * padding))
+        txt.setPos(minx - padding, miny - padding_top)
+
+        par = hn.parent
+        while par:
+            par: HierNode
+            if len(par.value) < 4 or par.value[3] is None:
+                break
+            _, _, _, par_cover = par.value
+            par_cover: QGraphicsRectItem
+            minx = cover.rect().x() - padding
+            miny = cover.rect().y() - padding_top
+            maxx = cover.rect().x() + cover.rect().width() + padding
+            maxy = cover.rect().y() + cover.rect().height() + padding
+
+            if minx < par_cover.rect().x() or \
+                    miny < par_cover.rect().y() or \
+                    maxx > par_cover.rect().x() + par_cover.rect().width() or \
+                    maxy > par_cover.rect().y() + par_cover.rect().height():
+                minx = min(minx, par_cover.rect().x())
+                miny = min(miny, par_cover.rect().y())
+                maxx = max(maxx, par_cover.rect().x() + par_cover.rect().width())
+                maxy = max(maxy, par_cover.rect().y() + par_cover.rect().height())
+                par_cover.setRect(Qt.QRectF(minx, miny, maxx-minx, maxy-miny))
+
+                txt, *_ = par_cover.childItems()
+                txt.setPos(minx, miny)
+                par = par.parent
+                cover = par_cover
+            else:
+                break
+
     def __transform(self, to: QPoint):
         arrows = set()
         for item in self.__viewer.view_selector.selected_items:
@@ -620,6 +916,7 @@ class PnvItemsTransformer(PnvToggleableComponent):
         for arr in arrows:
             arr.update(arr.boundingRect())
 
+        self.__update_hn_cover()
         self.__viewer.drawer.status.layout_changed = True
 
     def __is_started(self):
@@ -813,42 +1110,43 @@ class EditModeButton(QPushButton):
     def __init__(self, parent: 'PnvViewer'):
         QPushButton.__init__(self, parent)
         self.__padding = 5
-        self.__mode = PnvConfig.INSTANCE.enter_mode
+        if PnvConfig.INSTANCE.global_mode == PnvConfigConstants.GLOBAL_MODE_REVIEW:
+            self.__MODES = [PnvConfigConstants.ENTER_MODE_VIEW, PnvConfigConstants.ENTER_MODE_EXPLORE]
+        elif PnvConfig.INSTANCE.global_mode == PnvConfigConstants.GLOBAL_MODE_MUTATE:
+            self.__MODES = [PnvConfigConstants.ENTER_MODE_VIEW, PnvConfigConstants.ENTER_MODE_EXPLORE,
+                            PnvConfigConstants.ENTER_MODE_MUTATE]
+        else:
+            self.__MODES = [PnvConfigConstants.ENTER_MODE_VIEW]
+        if PnvConfig.INSTANCE.enter_mode in self.__MODES:
+            self.__mode = PnvConfig.INSTANCE.enter_mode
+        else:
+            self.__mode = self.__MODES[0]
         # init
         self.set_mode(self.__mode)
         self.resize(self.sizeHint().width(), self.sizeHint().height())
 
-    def is_view(self):
-        return self.__mode == PnvConfigConstants.ENTER_MODE_VIEW
-
-    def is_explore(self):
-        return self.__mode == PnvConfigConstants.ENTER_MODE_EXPLORE
-
-    def is_mutate(self):
-        return self.__mode == PnvConfigConstants.ENTER_MODE_MUTATE
+    def mode(self) -> str:
+        return self.__mode
 
     def set_mode(self, val: str):
         if val == PnvConfigConstants.ENTER_MODE_VIEW:
             self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
-            self.setToolTip('Режим взаимодействия: просмотр')
+            self.setToolTip('Режим взаимодействия: статичный просмотр')
         elif val == PnvConfigConstants.ENTER_MODE_EXPLORE:
             self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
-            self.setToolTip('Режим взаимодействия: интерактивный осмотр')
+            self.setToolTip('Режим взаимодействия: интерактивный просмотр')
         elif val == PnvConfigConstants.ENTER_MODE_MUTATE:
             self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogListView))
             self.setToolTip('Режим взаимодействия: редактирование')
         else:
             val = PnvConfigConstants.ENTER_MODE_VIEW
         self.__mode = val
-        self.sync_mode()
 
     def next(self, mode: str):
-        if mode == PnvConfigConstants.ENTER_MODE_VIEW:
-            return PnvConfigConstants.ENTER_MODE_EXPLORE
-        elif mode == PnvConfigConstants.ENTER_MODE_EXPLORE:
-            return PnvConfigConstants.ENTER_MODE_MUTATE
-        elif mode == PnvConfigConstants.ENTER_MODE_MUTATE:
-            return PnvConfigConstants.ENTER_MODE_VIEW
+        _len = len(self.__MODES)
+        _idx = self.__MODES.index(mode)
+        _next = (_idx + 1) % _len
+        return self.__MODES[_next]
 
     def sync_mode(self):
         p: 'PnvViewer' = self.parent()
@@ -861,6 +1159,7 @@ class EditModeButton(QPushButton):
 
     def mousePressEvent(self, e: Optional[QtGui.QMouseEvent]) -> None:
         self.set_mode(self.next(self.__mode))
+        self.sync_mode()
 
 
 class LabelingModeButton(QPushButton):
@@ -872,6 +1171,9 @@ class LabelingModeButton(QPushButton):
         # init
         self.set_labeling_mode(self.__labeling_mode)
         self.resize(self.sizeHint().width(), self.sizeHint().height())
+
+    def labeling_mode(self) -> str:
+        return self.__labeling_mode
 
     def set_labeling_mode(self, val: str):
         if val == PnvConfigConstants.LABELING_MODE_MIXED:
@@ -886,7 +1188,6 @@ class LabelingModeButton(QPushButton):
         else:
             val = PnvConfigConstants.LABELING_MODE_MIXED
         self.__labeling_mode = val
-        self.sync_labels()
 
     def sync_labels(self):
         p: 'PnvViewer' = self.parent()
@@ -907,9 +1208,7 @@ class LabelingModeButton(QPushButton):
 
     def mousePressEvent(self, e: Optional[QtGui.QMouseEvent]) -> None:
         self.set_labeling_mode(self.next(self.__labeling_mode))
-
-
-#class ItemsDisplay
+        self.sync_labels()
 
 
 class PnvViewer(QGraphicsView):
@@ -938,8 +1237,10 @@ class PnvViewer(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.Qt.ScrollBarAlwaysOff)
         self.horizontalScrollBar().setDisabled(True)
         self.verticalScrollBar().setDisabled(True)
-        self.viewmode_btn = EditModeButton(self)
+        self.edit_mode_btn = EditModeButton(self)
         self.labeling_btn = LabelingModeButton(self)
+        self.edit_mode_btn.sync_mode()
+        self.labeling_btn.sync_labels()
         self.__context_blocked = False
 
     def wheelEvent(self, e: Optional[QtGui.QWheelEvent]) -> None:
@@ -970,7 +1271,7 @@ class PnvViewer(QGraphicsView):
         super().mouseMoveEvent(e)
 
     def resizeEvent(self, event: Optional[QtGui.QResizeEvent]) -> None:
-        self.viewmode_btn.update_pos()
+        self.edit_mode_btn.update_pos()
         self.labeling_btn.update_pos()
         super().resizeEvent(event)
 
@@ -1024,6 +1325,11 @@ class PnvViewer(QGraphicsView):
         # update mouse pos
         self.mouse_ctrl.force_last_pos(self.mapToScene(event.pos()))
 
+    def drawer_push_modes(self):
+        self.drawer.edit_mode = self.edit_mode_btn.mode()
+        self.drawer.label_mode = self.labeling_btn.labeling_mode()
+        self.drawer.hv_cover_sync()
+
     def place_create(self):
         self.drawer.place_create(self.mouse_ctrl.last_pos())
 
@@ -1045,51 +1351,29 @@ class PnvViewer(QGraphicsView):
             self.view_selector.set_enabled(False)
             self.view_items_transformer.set_enabled(False)
             self.scene().setBackgroundBrush(self.bg_brush)
-            for item in self.items():
-                if isinstance(item, PnvQGTransitionItem):
-                    item.set_interactive(False)
-                    item.sync_labeling()
-                elif isinstance(item, PnvQGPlaceItem):
-                    item.set_interactive(False)
         else:
             self.view_selector.set_enabled(True)
             self.view_items_transformer.set_enabled(True)
             if edit_mode == PnvConfigConstants.ENTER_MODE_EXPLORE:
                 self.view_context_fire.set_enabled(False)
                 self.scene().setBackgroundBrush(self.bg_brush)
-                for item in self.items():
-                    if isinstance(item, PnvQGTransitionItem):
-                        item.set_interactive(True)
-                        item.only_wuw = True
-                        item.sync_labeling()
-                    elif isinstance(item, PnvQGPlaceItem):
-                        item.set_interactive(False)
             elif edit_mode == PnvConfigConstants.ENTER_MODE_MUTATE:
                 self.view_context_fire.set_enabled(True)
                 self.scene().setBackgroundBrush(self.bg_brush_mutate)
-                for item in self.items():
-                    if isinstance(item, PnvQGTransitionItem):
-                        item.set_interactive(True)
-                        item.only_wuw = False
-                        item.sync_labeling()
-                    elif isinstance(item, PnvQGPlaceItem):
-                        item.set_interactive(True)
 
+        for item in self.items():
+            if isinstance(item, (PnvQGTransitionItem, PnvQGPlaceItem)):
+                item.sync_with_mode(edit_mode=edit_mode)
+
+        self.drawer_push_modes()
         self.viewport().update()
 
     def labeling_mode_change_event(self, mode: str):
-        if mode == PnvConfigConstants.LABELING_MODE_MIXED:
-            for item in self.items():
-                if isinstance(item, Labeling):
-                    item.reset_label_effects()
-        elif mode == PnvConfigConstants.LABELING_MODE_CONTRAST:
-            for item in self.items():
-                if isinstance(item, Labeling):
-                    item.enable_label_outline()
-        elif mode == PnvConfigConstants.LABELING_MODE_OVERLAP:
-            for item in self.items():
-                if isinstance(item, Labeling):
-                    item.enable_bg_overlap()
+        for item in self.items():
+            if isinstance(item, (PnvQGTransitionItem, PnvQGPlaceItem)):
+                item.sync_with_mode(label_mode=mode)
+
+        self.drawer_push_modes()
         self.viewport().update()
 
     def enclose_selected(self):
@@ -1105,11 +1389,11 @@ class PnvViewer(QGraphicsView):
 
     def drawBackground(self, painter: Optional[QtGui.QPainter], rect: QtCore.QRectF) -> None:
         painter.fillRect(rect, self.scene().backgroundBrush())
-        if self.viewmode_btn.is_view():
+        if self.edit_mode_btn.mode() == PnvConfigConstants.ENTER_MODE_VIEW:
             return
-        if self.viewmode_btn.is_explore():
+        if self.edit_mode_btn.mode() == PnvConfigConstants.ENTER_MODE_EXPLORE:
             painter.setPen(self.bg_grid_pen)
-        if self.viewmode_btn.is_mutate():
+        elif self.edit_mode_btn.mode() == PnvConfigConstants.ENTER_MODE_MUTATE:
             painter.setPen(self.bg_grid_pen_mutate)
         # grid draw
         ix, ix0 = int(rect.x()), int(rect.x() + rect.width())
@@ -1172,4 +1456,5 @@ class PnvViewer(QGraphicsView):
                 obj.final = final[bound]
 
     def is_hierarchical_one(self):
-        return any(isinstance(obj.petri_net_bound(), ExtendedTransition) for obj in self.items() if isinstance(obj, PnvQGTransitionItem))
+        return any(isinstance(obj.petri_net_bound(), ExtendedTransition) for obj in self.items() if
+                   isinstance(obj, PnvQGTransitionItem))

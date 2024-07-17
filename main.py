@@ -12,9 +12,9 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QMenuBar, QFileDia
 
 from pnv.importer import epnml
 from pnv.render import PnvViewer, PnvDrawer
-from pnv.utils import PnvMessageBoxes, PnvConfig
+from pnv.utils import PnvMessageBoxes, PnvConfig, PnvConfigConstants
 
-CURRENT_VERSION = '1.20'
+CURRENT_VERSION = '1.21'
 APP_NAME = "Petri Net Visualizer"
 
 
@@ -279,9 +279,10 @@ class PnvMainWindow(QMainWindow):
             drawer = PnvDrawer(gr, pn)
             viewer = PnvViewer(drawer, gr)
             try:
+                viewer.drawer_push_modes()
                 drawer.draw_petri_net()
                 viewer.init_markings(im, fm)
-                viewer.viewmode_btn.sync_mode()
+
             except TypeError as te:
                 if len(te.args) == 1 and te.args[0] == PnvMainWindow.RENDER_CANCELLED:
                     return
@@ -364,6 +365,7 @@ class PnvMainWindow(QMainWindow):
         viewer = PnvViewer(drawer, gr)
         try:
             # try draw
+            viewer.drawer_push_modes()
             drawer.draw_petri_net()
 
             idx = self.tabs.addTab(viewer, name)

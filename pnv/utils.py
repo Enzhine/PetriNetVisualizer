@@ -90,6 +90,15 @@ class PnvConfigConstants:
     LABELING_MODE_CONTRAST = 'contrast'
     LABELING_MODE_OVERLAP = 'overlap'
 
+    GLOBAL_MODE_REVIEW = 'review'
+    GLOBAL_MODE_MUTATE = 'mutate'
+
+    @staticmethod
+    def color_at(_ord: int):
+        cols = PnvConfig.INSTANCE.wrap_colors
+        _len = len(cols)
+        return int(cols[_ord % _len][1:], 16)
+
 
 class PnvConfig:
     CONFIG_FILE = "conf.json"
@@ -107,6 +116,22 @@ class PnvConfig:
         self.text_font_family: str = 'Arial font'
         self.text_font_size: int = 10
         self.text_font_weight: int = 2
+        self.wrap_colors: list[str] = [
+            "#FF9696",
+            "#FFCA96",
+            "#FFFF96",
+            "#CAFF96",
+            "#96FF96",
+            "#96FFCA",
+            "#96FFFF",
+            "#96CAFF",
+            "#9696FF",
+            "#CA96FF",
+            "#FF96FF",
+            "#FF96CA",
+            "#FF9696"
+        ]
+        self.global_mode: str = PnvConfigConstants.GLOBAL_MODE_REVIEW
         # folder name
         folder_name = folder_name.replace(' ', '')
         if len(folder_name) == 0:
