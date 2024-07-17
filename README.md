@@ -1,4 +1,4 @@
-# Petri Net Visualizer v1.20
+# Petri Net Visualizer v1.21
 HSE SE 2nd Course Project.
 Shamaev Onar Evgenevich
 
