@@ -1,5 +1,7 @@
 from typing import Union
 
+from PyQt5.QtGui import QStandardItemModel, QStandardItem
+
 
 class HierNode:
     def __init__(self, name: str, parent: 'HierNode', value):
@@ -24,6 +26,17 @@ class HierNode:
     def remove_child(self, child: 'HierNode'):
         child.__level = self.__level - 1
         self.__children.remove(child)
+
+    def make_tree(self, root=None, hitem=None) -> QStandardItemModel:
+        if root is None and hitem is None:
+            root = self
+            hitem = QStandardItemModel()
+        for c in root.__children:
+            c_item = QStandardItem(c.name)
+            hitem.appendRow(c_item)
+            if len(c.__children) != 0:
+                self.make_tree(c, c_item)
+        return hitem
 
 
 class Hierarchical:

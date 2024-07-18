@@ -4,7 +4,7 @@ from typing import Union, Optional, Tuple
 from PyQt5 import Qt, QtCore, QtGui
 from PyQt5.QtCore import QPoint
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsRectItem, QGraphicsView, QApplication, QMenu, \
-    QStyle, QPushButton, QGraphicsItem
+    QStyle, QPushButton, QTreeView
 from pm4py import PetriNet, Marking
 from igraph import Graph
 from math import log, floor, ceil
@@ -62,15 +62,18 @@ class PnvDrawer:
         if self.is_review_mode():
             self.__cached_htree = self.__make_htree()
 
+    def hn_root(self):
+        return self.__cached_htree
+
     def is_review_mode(self):
         return PnvConfig.INSTANCE.global_mode == PnvConfigConstants.GLOBAL_MODE_REVIEW
 
     def __make_htree(self, root: tuple[HierNode, ExtendedTransition] = None):
         if root:
             rhn, rt = root
-            hn = HierNode(rt.name, rhn, (rt, rt.inner_net, None))
+            hn = HierNode(rt.label, rhn, (rt, rt.inner_net, None))
         else:
-            hn = HierNode('root', None, (None, self.net, None))
+            hn = HierNode(self.net.name, None, (None, self.net, None))
         _net = hn.value[1]
         for t in _net.transitions:
             if isinstance(t, ExtendedTransition):
@@ -440,6 +443,36 @@ class PnvDrawer:
         _hv_txt.setZValue(2)
         _hv_cover.setZValue(0)
 
+        cover = _hv_cover
+        par = hn.parent
+        while par:
+            par: HierNode
+            if len(par.value) < 4 or par.value[3] is None:
+                break
+            _, _, _, par_cover = par.value
+            par_cover: QGraphicsRectItem
+            minx = cover.rect().x() - padding
+            miny = cover.rect().y() - padding_top
+            maxx = cover.rect().x() + cover.rect().width() + padding
+            maxy = cover.rect().y() + cover.rect().height() + padding
+
+            if minx < par_cover.rect().x() or \
+                    miny < par_cover.rect().y() or \
+                    maxx > par_cover.rect().x() + par_cover.rect().width() or \
+                    maxy > par_cover.rect().y() + par_cover.rect().height():
+                minx = min(minx, par_cover.rect().x())
+                miny = min(miny, par_cover.rect().y())
+                maxx = max(maxx, par_cover.rect().x() + par_cover.rect().width())
+                maxy = max(maxy, par_cover.rect().y() + par_cover.rect().height())
+                par_cover.setRect(Qt.QRectF(minx, miny, maxx - minx, maxy - miny))
+
+                txt, *_ = par_cover.childItems()
+                txt.setPos(minx, miny)
+                par = par.parent
+                cover = par_cover
+            else:
+                break
+
         return _hv_cover
 
     def subnet_unwrap_mutate(self, trans_obj: PnvQGTransitionItem):
@@ -518,6 +551,13 @@ class PnvDrawer:
         hn = obj.hiernode_bound()
         extr, _net, objs, cover = hn.value
 
+        for c in hn.children():
+            if len(c.value) < 4 or c.value[3] is None:
+                continue
+            _, _, c_objs, _ = c.value
+            c_obj, *_ = c_objs
+            self.subnet_wrap_review(c_obj)
+
         cover.hide()
         self.scene.removeItem(cover)
 
@@ -530,19 +570,6 @@ class PnvDrawer:
                 outer_to_objs.add(arrow.to)
             elif not (arrow.from_ in objs):
                 outer_from_objs.add(arrow.from_)
-
-        # future transition place
-        min_bx = 10**10
-        min_by = 10**10
-        max_bx = -10**9
-        max_by = -10**9
-        for o in objs:
-            x, y = PnvDrawer.final_pos(o)
-            min_bx = min(min_bx, x)
-            min_by = min(min_by, y)
-            max_bx = max(max_bx, x)
-            max_by = max(max_by, y)
-        objs_center = (min_bx + (max_bx - min_bx) / 2, min_by + (max_by - min_by) / 2)
 
         # creating wrapped net
         for obj in objs:
@@ -568,8 +595,6 @@ class PnvDrawer:
             del self.mapper[obj.petri_net_bound()]
             self.scene.removeItem(obj)
 
-        # adding new objects
-        extr.properties['layout_information_petri'] = (objs_center, (PnvDrawer.GRAPHICS_WIDTH, PnvDrawer.GRAPHICS_WIDTH))
         # # gui
         obj = self.draw_transition(extr)
         obj.hiernode_bind(hn.parent)
@@ -1211,6 +1236,24 @@ class LabelingModeButton(QPushButton):
         self.sync_labels()
 
 
+class GraphHierTree(QTreeView):
+    def __init__(self, parent: 'PnvViewer', root: HierNode):
+        QTreeView.__init__(self, parent)
+        self.__padding_x = 5
+        self.__padding_y = 5
+        # init
+        qmodel = root.make_tree()
+        qmodel.setHeaderData(0, Qt.Qt.Orientation.Horizontal, root.name)
+        self.setModel(qmodel)
+        self.resize(self.sizeHint().width(), self.sizeHint().height())
+        self.expandAll()
+
+    def update_pos(self):
+        x = self.__padding_x
+        y = self.__padding_y
+        self.setGeometry(x, y, self.width(), self.height())
+
+
 class PnvViewer(QGraphicsView):
     def __init__(self, drawer: PnvDrawer, *args, **kwargs):
         self.drawer = drawer
@@ -1243,6 +1286,10 @@ class PnvViewer(QGraphicsView):
         self.labeling_btn.sync_labels()
         self.__context_blocked = False
 
+        self.__hier_tree = None
+        if self.drawer.is_review_mode():
+            self.__hier_tree = GraphHierTree(self, self.drawer.hn_root())
+
     def wheelEvent(self, e: Optional[QtGui.QWheelEvent]) -> None:
         self.view_scaler.wheel_event(e)
         super().wheelEvent(e)
@@ -1273,6 +1320,7 @@ class PnvViewer(QGraphicsView):
     def resizeEvent(self, event: Optional[QtGui.QResizeEvent]) -> None:
         self.edit_mode_btn.update_pos()
         self.labeling_btn.update_pos()
+        self.__hier_tree.update_pos()
         super().resizeEvent(event)
 
     def context_menu_fire_event(self):
