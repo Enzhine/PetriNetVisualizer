@@ -50,7 +50,8 @@ class Labeling:
         cursor.setCharFormat(_format)
 
     def reset_label_effects(self):
-        Labeling.reset_any_label_effects(self.__text_obj)
+        if self.__text_obj:
+            Labeling.reset_any_label_effects(self.__text_obj)
         self.__bg_overlap = False
 
     @staticmethod
@@ -63,7 +64,8 @@ class Labeling:
         cursor.setCharFormat(_format)
 
     def enable_label_outline(self):
-        Labeling.enable_any_label_outline(self.__text_obj)
+        if self.__text_obj:
+            Labeling.enable_any_label_outline(self.__text_obj)
 
     @staticmethod
     def enable_any_bg_overlap(txt: QGraphicsTextItem):
@@ -76,7 +78,8 @@ class Labeling:
 
     def enable_bg_overlap(self):
         self.__bg_overlap = True
-        Labeling.enable_any_bg_overlap(self.__text_obj)
+        if self.__text_obj:
+            Labeling.enable_any_bg_overlap(self.__text_obj)
 
     def update(self):
         if self.__bg_overlap:
@@ -390,13 +393,16 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Hierarc
         if edit_mode:
             if edit_mode == PnvConfigConstants.ENTER_MODE_VIEW:
                 self.set_interactive(False)
-                self.only_review = True
+                if self.drawer.is_review_mode():
+                    self.only_review = True
             elif edit_mode == PnvConfigConstants.ENTER_MODE_EXPLORE:
                 self.set_interactive(True)
-                self.only_review = True
+                if self.drawer.is_review_mode():
+                    self.only_review = True
             elif edit_mode == PnvConfigConstants.ENTER_MODE_MUTATE:
                 self.set_interactive(True)
-                self.only_review = False
+                if self.drawer.is_review_mode():
+                    self.only_review = False
 
 
 class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Hierarchical, Labeling):
@@ -537,10 +543,12 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Hiera
             else:
                 if edit_mode == PnvConfigConstants.ENTER_MODE_EXPLORE:
                     self.set_interactive(True)
-                    self.only_review = True
+                    if self.drawer.is_review_mode():
+                        self.only_review = True
                 elif edit_mode == PnvConfigConstants.ENTER_MODE_MUTATE:
                     self.set_interactive(True)
-                    self.only_review = False
+                    if self.drawer.is_review_mode():
+                        self.only_review = False
 
         if label_mode:
             if label_mode == PnvConfigConstants.LABELING_MODE_MIXED:

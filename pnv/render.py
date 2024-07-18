@@ -309,6 +309,84 @@ class PnvDrawer:
 
         self.status.layout_changed = True
 
+    @staticmethod
+    def bounds(lst: list[Union[PnvQGTransitionItem, PnvQGPlaceItem]]):
+        minx, miny, maxx, maxy = 10 ** 10, 10 ** 10, -10 ** 9, -10 ** 9
+        for e in lst:
+            x, y = PnvDrawer.final_pos(e)
+            minx = min(minx, x)
+            miny = min(miny, y)
+            maxx = max(maxx, x)
+            maxy = max(maxy, y)
+        return minx, miny, maxx, maxy
+
+    def hv_cover_sync(self, root=None):
+        if root is None:
+            root = self.__cached_htree
+        for n in root.children():
+            if len(n.value) < 4 or n.value[3] is None:
+                continue
+            cover = n.value[3]
+            txt, *_ = cover.childItems()
+            if self.label_mode == PnvConfigConstants.LABELING_MODE_MIXED:
+                Labeling.reset_any_label_effects(txt)
+            elif self.label_mode == PnvConfigConstants.LABELING_MODE_CONTRAST:
+                Labeling.enable_any_label_outline(txt)
+            elif self.label_mode == PnvConfigConstants.LABELING_MODE_OVERLAP:
+                Labeling.enable_any_bg_overlap(txt)
+            self.hv_cover_sync(n)
+
+    def __make_hv_cover(self, lst: list[Union[PnvQGTransitionItem, PnvQGPlaceItem]], hn: HierNode):
+        minx, miny, maxx, maxy = PnvDrawer.bounds(lst)
+        padding = PnvDrawer.GRAPHICS_WIDTH
+        new_col = QtGui.QColor(PnvConfigConstants.color_at(hn.level() - 1)).darker(125)
+
+        _hv_txt = self.scene.addText(hn.name,
+                                     QtGui.QFont(PnvConfig.INSTANCE.text_font_family,
+                                                 PnvConfig.INSTANCE.text_font_size,
+                                                 PnvConfig.INSTANCE.text_font_weight))
+        padding_top = QtGui.QFontMetrics(_hv_txt.font()).height() + padding
+        _hv_cover = self.scene.addRect(
+            Qt.QRectF(minx - padding, miny - padding_top, maxx - minx + 2 * padding, maxy - miny + 3 * padding),
+            Qt.QPen(new_col, 2, Qt.Qt.DashLine))
+        _hv_txt.setPos(minx - padding, miny - padding_top)
+        _hv_txt.setDefaultTextColor(new_col)
+        _hv_txt.setParentItem(_hv_cover)
+        _hv_txt.setZValue(2)
+        _hv_cover.setZValue(0)
+
+        cover = _hv_cover
+        par = hn.parent
+        while par:
+            par: HierNode
+            if len(par.value) < 4 or par.value[3] is None:
+                break
+            _, _, _, par_cover = par.value
+            par_cover: QGraphicsRectItem
+            minx = cover.rect().x() - padding
+            miny = cover.rect().y() - padding_top
+            maxx = cover.rect().x() + cover.rect().width() + padding
+            maxy = cover.rect().y() + cover.rect().height() + padding
+
+            if minx < par_cover.rect().x() or \
+                    miny < par_cover.rect().y() or \
+                    maxx > par_cover.rect().x() + par_cover.rect().width() or \
+                    maxy > par_cover.rect().y() + par_cover.rect().height():
+                minx = min(minx, par_cover.rect().x())
+                miny = min(miny, par_cover.rect().y())
+                maxx = max(maxx, par_cover.rect().x() + par_cover.rect().width())
+                maxy = max(maxy, par_cover.rect().y() + par_cover.rect().height())
+                par_cover.setRect(Qt.QRectF(minx, miny, maxx - minx, maxy - miny))
+
+                txt, *_ = par_cover.childItems()
+                txt.setPos(minx, miny)
+                par = par.parent
+                cover = par_cover
+            else:
+                break
+
+        return _hv_cover
+
     def subnet_unwrap(self, trans_obj: PnvQGTransitionItem):
         extr: PetriNet.Transition = trans_obj.petri_net_bound()
 
@@ -396,84 +474,6 @@ class PnvDrawer:
         self.hv_cover_sync(hn.parent)
         # overall scene update
         self.scene.update()
-
-    @staticmethod
-    def bounds(lst: list[Union[PnvQGTransitionItem, PnvQGPlaceItem]]):
-        minx, miny, maxx, maxy = 10 ** 10, 10 ** 10, -10 ** 9, -10 ** 9
-        for e in lst:
-            x, y = PnvDrawer.final_pos(e)
-            minx = min(minx, x)
-            miny = min(miny, y)
-            maxx = max(maxx, x)
-            maxy = max(maxy, y)
-        return minx, miny, maxx, maxy
-
-    def hv_cover_sync(self, root=None):
-        if root is None:
-            root = self.__cached_htree
-        for n in root.children():
-            if len(n.value) < 4 or n.value[3] is None:
-                continue
-            cover = n.value[3]
-            txt, *_ = cover.childItems()
-            if self.label_mode == PnvConfigConstants.LABELING_MODE_MIXED:
-                Labeling.reset_any_label_effects(txt)
-            elif self.label_mode == PnvConfigConstants.LABELING_MODE_CONTRAST:
-                Labeling.enable_any_label_outline(txt)
-            elif self.label_mode == PnvConfigConstants.LABELING_MODE_OVERLAP:
-                Labeling.enable_any_bg_overlap(txt)
-            self.hv_cover_sync(n)
-
-    def __make_hv_cover(self, lst: list[Union[PnvQGTransitionItem, PnvQGPlaceItem]], hn: HierNode):
-        minx, miny, maxx, maxy = PnvDrawer.bounds(lst)
-        padding = PnvDrawer.GRAPHICS_WIDTH
-        new_col = QtGui.QColor(PnvConfigConstants.color_at(hn.level() - 1)).darker(125)
-
-        _hv_txt = self.scene.addText(hn.name,
-                                     QtGui.QFont(PnvConfig.INSTANCE.text_font_family,
-                                                 PnvConfig.INSTANCE.text_font_size,
-                                                 PnvConfig.INSTANCE.text_font_weight))
-        padding_top = QtGui.QFontMetrics(_hv_txt.font()).height() + padding
-        _hv_cover = self.scene.addRect(
-            Qt.QRectF(minx - padding, miny - padding_top, maxx - minx + 2 * padding, maxy - miny + 3 * padding),
-            Qt.QPen(new_col, 2, Qt.Qt.DashLine))
-        _hv_txt.setPos(minx - padding, miny - padding_top)
-        _hv_txt.setDefaultTextColor(new_col)
-        _hv_txt.setParentItem(_hv_cover)
-        _hv_txt.setZValue(2)
-        _hv_cover.setZValue(0)
-
-        cover = _hv_cover
-        par = hn.parent
-        while par:
-            par: HierNode
-            if len(par.value) < 4 or par.value[3] is None:
-                break
-            _, _, _, par_cover = par.value
-            par_cover: QGraphicsRectItem
-            minx = cover.rect().x() - padding
-            miny = cover.rect().y() - padding_top
-            maxx = cover.rect().x() + cover.rect().width() + padding
-            maxy = cover.rect().y() + cover.rect().height() + padding
-
-            if minx < par_cover.rect().x() or \
-                    miny < par_cover.rect().y() or \
-                    maxx > par_cover.rect().x() + par_cover.rect().width() or \
-                    maxy > par_cover.rect().y() + par_cover.rect().height():
-                minx = min(minx, par_cover.rect().x())
-                miny = min(miny, par_cover.rect().y())
-                maxx = max(maxx, par_cover.rect().x() + par_cover.rect().width())
-                maxy = max(maxy, par_cover.rect().y() + par_cover.rect().height())
-                par_cover.setRect(Qt.QRectF(minx, miny, maxx - minx, maxy - miny))
-
-                txt, *_ = par_cover.childItems()
-                txt.setPos(minx, miny)
-                par = par.parent
-                cover = par_cover
-            else:
-                break
-
-        return _hv_cover
 
     def subnet_unwrap_mutate(self, trans_obj: PnvQGTransitionItem):
         extr: ExtendedTransition = trans_obj.petri_net_bound()
@@ -1320,7 +1320,8 @@ class PnvViewer(QGraphicsView):
     def resizeEvent(self, event: Optional[QtGui.QResizeEvent]) -> None:
         self.edit_mode_btn.update_pos()
         self.labeling_btn.update_pos()
-        self.__hier_tree.update_pos()
+        if self.drawer.is_review_mode():
+            self.__hier_tree.update_pos()
         super().resizeEvent(event)
 
     def context_menu_fire_event(self):
@@ -1376,7 +1377,8 @@ class PnvViewer(QGraphicsView):
     def drawer_push_modes(self):
         self.drawer.edit_mode = self.edit_mode_btn.mode()
         self.drawer.label_mode = self.labeling_btn.labeling_mode()
-        self.drawer.hv_cover_sync()
+        if self.drawer.is_review_mode():
+            self.drawer.hv_cover_sync()
 
     def place_create(self):
         self.drawer.place_create(self.mouse_ctrl.last_pos())
