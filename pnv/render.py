@@ -633,8 +633,8 @@ class PnvDrawer:
                                                                            PnvQGTransitionItem) and not isinstance(
                     arrow.to.petri_net_bound(), ExtendedTransition)
         # boundary verification
-        if not boundary_transitions:
-            raise pnv.importer.epnml.EPNMLException('Boundary objects must be simple transitions!')
+        # if not boundary_transitions:
+        #     raise pnv.importer.epnml.EPNMLException('Boundary objects must be simple transitions!')
 
         # wrappability verification-2
         if len(outer_to_objs) + len(outer_from_objs) == 0:

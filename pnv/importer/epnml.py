@@ -1,8 +1,9 @@
 import time
 from lxml import etree, objectify
+from pm4py.objects.petri_net.saw_net.obj import StochasticArcWeightNet
 
 from pm4py.util import constants, exec_utils
-from pm4py.objects.petri_net import properties as petri_properties
+from pm4py.objects.petri_net import properties as petri_properties, properties
 from pm4py.objects.petri_net.obj import PetriNet, Marking, ResetNet, InhibitorNet, ResetInhibitorNet
 from pm4py.objects.petri_net.utils.petri_utils import add_arc_from_to
 from pm4py.objects.petri_net.importer.variants.pnml import Parameters
@@ -11,6 +12,50 @@ from pm4py.objects.petri_net.importer.variants.pnml import Parameters
 class EPNMLException(Exception):
     def __init__(self, *args):
         super(EPNMLException, self).__init__(*args)
+
+
+def add_floating_arc_from_to(fr, to, net: PetriNet, weight=1, type=None, inner_fr=True) -> PetriNet.Arc:
+    """
+    Adds an arc from a specific element to another element in some net. Assumes from and to are in the net!
+
+    Parameters
+    ----------
+    fr: transition/place from
+    to:  transition/place to
+    net: net to use
+    weight: weight associated to the arc
+
+    Returns
+    -------
+    None
+    """
+    if type == properties.INHIBITOR_ARC:
+        if isinstance(net, InhibitorNet):
+            a = InhibitorNet.InhibitorArc(fr, to, weight)
+            a.properties[properties.ARCTYPE] = type
+        else:
+            raise Exception("trying to add an inhibitor arc on a traditional Petri net object.")
+    elif type == properties.RESET_ARC:
+        if isinstance(net, ResetNet):
+            a = ResetNet.ResetArc(fr, to, weight)
+            a.properties[properties.ARCTYPE] = type
+        else:
+            raise Exception("trying to add a reset arc on a traditional Petri net object.")
+    elif type == properties.STOCHASTIC_ARC:
+        if isinstance(net, StochasticArcWeightNet):
+            a = StochasticArcWeightNet.Arc(fr, to, weight)
+            #a.properties[properties.ARCTYPE] = type
+        else:
+            raise Exception("trying to add a stochastic arc on a traditional Petri net object.")
+    else:
+        a = PetriNet.Arc(fr, to, weight)
+    net.arcs.add(a)
+    if inner_fr:
+        fr.out_arcs.add(a)
+    else:
+        to.in_arcs.add(a)
+
+    return a
 
 
 class ExtendedTransition(PetriNet.Transition):
@@ -62,7 +107,7 @@ def import_net(input_file_path, parameters=None):
     return import_net_from_xml_object(root, parameters=parameters)
 
 
-def import_net_from_xml_object(nett, parameters, top_net_data=None):
+def import_net_from_xml_object(nett, parameters, top_net_places=None):
     # root expected to be a <net> or <transition>
     if parameters is None:
         parameters = {}
@@ -209,8 +254,10 @@ def import_net_from_xml_object(nett, parameters, top_net_data=None):
 
     for et, child in ext_trans_dict.items():
         try:
-            group_inner_net, inner_init, inner_fin = import_net_from_xml_object(child, None,
-                                                                                (places_dict, trans_dict))
+            _top_net_places = places_dict
+            if top_net_places:
+                _top_net_places |= top_net_places
+            group_inner_net, inner_init, inner_fin = import_net_from_xml_object(child, None, _top_net_places)
             if not group_inner_net:
                 raise EPNMLException(f'Empty extended transition {child}!')
             et.inject_net(group_inner_net, inner_init, inner_fin)
@@ -238,13 +285,11 @@ def import_net_from_xml_object(nett, parameters, top_net_data=None):
                                 arc_type = text_element.text
 
                 inhibic = (arc_source in places_dict) and (arc_target in trans_dict)
-                if top_net_data is not None:
-                    inhibic = inhibic or ((arc_source in top_net_data[0]) and (arc_target in trans_dict)) or \
-                              (arc_source in places_dict) and (arc_target in top_net_data[1])
+                if top_net_places is not None:
+                    inhibic = inhibic or ((arc_source in top_net_places) and (arc_target in trans_dict))
                 rever = (arc_target in places_dict) and (arc_source in trans_dict)
-                if top_net_data is not None:
-                    rever = rever or ((arc_target in top_net_data[0]) and (arc_source in trans_dict)) or \
-                            (arc_target in places_dict) and (arc_source in top_net_data[1])
+                if top_net_places is not None:
+                    rever = rever or ((arc_target in top_net_places) and (arc_source in trans_dict))
 
                 if inhibic:
                     if arc_type == petri_properties.INHIBITOR_ARC and not isinstance(net, InhibitorNet):
@@ -266,26 +311,34 @@ def import_net_from_xml_object(nett, parameters, top_net_data=None):
                     # outer redirection
                     pdict = places_dict
                     tdict = trans_dict
-                    if top_net_data and (arc_source in top_net_data[0]):
-                        pdict = top_net_data[0]
-                    elif top_net_data and (arc_target in top_net_data[1]):
-                        tdict = top_net_data[1]
+                    out = False
+                    if top_net_places and (arc_source in top_net_places):
+                        out = True
+                        pdict = top_net_places
                     # redirect finish
-                    a = add_arc_from_to(pdict[arc_source], tdict[arc_target], net, weight=arc_weight,
-                                        type=arc_type)
+                    if out:
+                        a = add_floating_arc_from_to(pdict[arc_source], tdict[arc_target], net, weight=arc_weight,
+                                            type=arc_type, inner_fr=False)
+                    else:
+                        a = add_arc_from_to(pdict[arc_source], tdict[arc_target], net, weight=arc_weight,
+                                            type=arc_type)
                     for prop in arc_properties:
                         a.properties[prop] = arc_properties[prop]
                 elif rever:
                     # outer redirection
                     pdict = places_dict
                     tdict = trans_dict
-                    if top_net_data and (arc_source in top_net_data[1]):
-                        tdict = top_net_data[1]
-                    elif top_net_data and (arc_target in top_net_data[0]):
-                        pdict = top_net_data[0]
+                    out = False
+                    if top_net_places and (arc_target in top_net_places):
+                        out = True
+                        pdict = top_net_places
                     # redirect finish
-                    a = add_arc_from_to(tdict[arc_source], pdict[arc_target], net, weight=arc_weight,
-                                        type=arc_type)
+                    if out:
+                        a = add_floating_arc_from_to(tdict[arc_source], pdict[arc_target], net, weight=arc_weight,
+                                            type=arc_type, inner_fr=True)
+                    else:
+                        a = add_arc_from_to(tdict[arc_source], pdict[arc_target], net, weight=arc_weight,
+                                            type=arc_type)
                     for prop in arc_properties:
                         a.properties[prop] = arc_properties[prop]
 
@@ -426,7 +479,8 @@ def export_petri_tree(petrinet, marking, final_marking=None, parameters=None, to
 
     # export inner net
     for xml_obj, extr in extended:
-        export_petri_tree(extr.inner_net, extr.init_marking, extr.final_marking, None, (xml_obj, transitions_map, places_map))
+        export_petri_tree(extr.inner_net, extr.init_marking, extr.final_marking, None,
+                          (xml_obj, transitions_map, places_map))
 
     if len(final_marking) > 0:
         finalmarkings = etree.SubElement(net, "finalmarkings")
