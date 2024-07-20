@@ -12,7 +12,7 @@ from pm4py import PetriNet
 
 import pnv.importer.epnml
 from pnv.interactive.hierarchy import Hierarchical, HierNode
-from pnv.utils import PnvMessageBoxes, PnvConfig, PnvConfigConstants
+from pnv.utils import PnvMessageBoxes, PnvConfig, PnvConfigConstants, PnvIcons
 
 
 class Labeling:
@@ -366,8 +366,7 @@ class PnvQGPlaceItem(QGraphicsEllipseItem, PnvInteractive, PetriNetBind, Hierarc
             if self.hiernode_bound().level() == 0:
                 return
             cmenu = QMenu(self.scene().parent())
-            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown),
-                            '&Свернуть подсеть', self.close_subnet)
+            cmenu.addAction(PnvIcons.WRAP_ICON, '&Свернуть подсеть', self.close_subnet)
             cmenu.exec(event.screenPos())
             super(PnvQGPlaceItem, self).contextMenuEvent(event)
             return
@@ -497,12 +496,10 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Hiera
                 return
             cmenu = QMenu(self.scene().parent())
             if isinstance(trans, pnv.importer.epnml.ExtendedTransition):
-                cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp),
-                                '&Развернуть подсеть', self.open_subnet)
+                cmenu.addAction(PnvIcons.UNWRAP_ICON, '&Развернуть подсеть', self.open_subnet)
                 cmenu.addSeparator()
             if self.hiernode_bound().level() != 0:
-                cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown),
-                                '&Свернуть подсеть', self.close_subnet)
+                cmenu.addAction(PnvIcons.WRAP_ICON, '&Свернуть подсеть', self.close_subnet)
             cmenu.exec(event.screenPos())
             super(PnvQGTransitionItem, self).contextMenuEvent(event)
             return
@@ -510,8 +507,7 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Hiera
         cmenu.addAction('&Назначить ярлык', lambda: self._ctxt_change_label())
         cmenu.addSeparator()
         if isinstance(trans, pnv.importer.epnml.ExtendedTransition):
-            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp),
-                            '&Раскрыть подсеть', self.open_subnet)
+            cmenu.addAction(PnvIcons.UNWRAP_ICON, '&Развернуть подсеть', self.open_subnet)
             cmenu.addSeparator()
         cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxCritical), '&Удалить',
                         self.remove_item)
@@ -527,8 +523,7 @@ class PnvQGTransitionItem(QGraphicsRectItem, PnvInteractive, PetriNetBind, Hiera
         except pnv.importer.epnml.EPNMLException as ex:
             from main import PnvMainWindow
             PnvMessageBoxes.warning(f"Невозможно раскрыть вложенную сеть!",
-                                    f"{ex}",
-                                    icon=PnvMainWindow.WINDOW_ICON).exec()
+                                    f"{ex}").exec()
 
     def close_subnet(self):
         self.drawer.subnet_wrap({self})

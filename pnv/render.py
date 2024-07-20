@@ -13,7 +13,7 @@ import pnv.importer.epnml
 from pnv.graphics import PnvQGTransitionItem, PnvQGPlaceItem, PnvQGArrowItem, Labeling
 from pnv.importer.epnml import ExtendedTransition
 from pnv.interactive.hierarchy import HierNode, Hierarchical
-from pnv.utils import PnvMessageBoxes, PnvConfig, PnvConfigConstants
+from pnv.utils import PnvMessageBoxes, PnvConfig, PnvConfigConstants, PnvIcons
 
 Layout = Tuple[Tuple[int, int], Tuple[int, int]]
 
@@ -137,8 +137,7 @@ class PnvDrawer:
         if not all(self.has_layout(obj) for obj in [*self.net.places, *self.net.transitions]):
             from main import PnvMainWindow
             PnvMessageBoxes.proceed(f"Загруженная сеть не имеет предопределённую разметку!",
-                                    f"Будет произведена генерация автоматической разметки.",
-                                    icon=PnvMainWindow.WINDOW_ICON).exec()
+                                    f"Будет произведена генерация автоматической разметки.").exec()
             self.igraph_gen_layout(self.net)
         lst = []
         for p in self.net.places:
@@ -1155,13 +1154,13 @@ class EditModeButton(QPushButton):
 
     def set_mode(self, val: str):
         if val == PnvConfigConstants.ENTER_MODE_VIEW:
-            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
+            self.setIcon(PnvIcons.VIEW_MODE_ICON)
             self.setToolTip('Режим взаимодействия: статичный просмотр')
         elif val == PnvConfigConstants.ENTER_MODE_EXPLORE:
-            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
+            self.setIcon(PnvIcons.REVIEW_MODE_ICON)
             self.setToolTip('Режим взаимодействия: интерактивный просмотр')
         elif val == PnvConfigConstants.ENTER_MODE_MUTATE:
-            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogListView))
+            self.setIcon(PnvIcons.EDIT_MODE_ICON)
             self.setToolTip('Режим взаимодействия: редактирование')
         else:
             val = PnvConfigConstants.ENTER_MODE_VIEW
@@ -1202,13 +1201,13 @@ class LabelingModeButton(QPushButton):
 
     def set_labeling_mode(self, val: str):
         if val == PnvConfigConstants.LABELING_MODE_MIXED:
-            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarNormalButton))
+            self.setIcon(PnvIcons.TXT_REGULAR_ICON)
             self.setToolTip('Режим ярлыков: смешано')
         elif val == PnvConfigConstants.LABELING_MODE_CONTRAST:
-            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarMaxButton))
+            self.setIcon(PnvIcons.TXT_CONTRAST_ICON)
             self.setToolTip('Режим ярлыков: контрастно')
         elif val == PnvConfigConstants.LABELING_MODE_OVERLAP:
-            self.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarShadeButton))
+            self.setIcon(PnvIcons.TXT_OVERLAP_ICON)
             self.setToolTip('Режим ярлыков: перекрывать')
         else:
             val = PnvConfigConstants.LABELING_MODE_MIXED
@@ -1334,9 +1333,9 @@ class PnvViewer(QGraphicsView):
         if len(self.view_selector.selected_items) == 1:
             return  # skip all selected or single one
         elif len(self.view_selector.selected_items) == 0:
-            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_TitleBarUnshadeButton),
+            cmenu.addAction(PnvIcons.PLACE_ICON,
                             '&Добавить позицию', self.place_create)
-            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_TitleBarUnshadeButton),
+            cmenu.addAction(PnvIcons.TRANSITION_ICON,
                             '&Добавить переход', self.transition_create)
         elif len(self.view_selector.selected_items) == 2:
             first, second, *_ = self.view_selector.selected_items
@@ -1359,8 +1358,7 @@ class PnvViewer(QGraphicsView):
                 cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay),
                                 '&Соединить', self.arc_connect)
         else:
-            cmenu.addAction(self.scene().style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown),
-                            '&Объединить в подсеть', self.enclose_selected)
+            cmenu.addAction(PnvIcons.WRAP_ICON, '&Свернуть в подсеть', self.enclose_selected)
         self.__context_blocked = True
         cmenu.exec(pos)
 
@@ -1434,8 +1432,7 @@ class PnvViewer(QGraphicsView):
         except pnv.importer.epnml.EPNMLException as ex:
             from main import PnvMainWindow
             PnvMessageBoxes.warning(f"Невозможно сделать вложенную сеть!",
-                                    f"{ex}",
-                                    icon=PnvMainWindow.WINDOW_ICON).exec()
+                                    f"{ex}").exec()
 
     def drawBackground(self, painter: Optional[QtGui.QPainter], rect: QtCore.QRectF) -> None:
         painter.fillRect(rect, self.scene().backgroundBrush())

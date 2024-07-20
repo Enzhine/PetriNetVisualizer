@@ -1,15 +1,38 @@
 import types
 
 from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QStandardPaths
 from PyQt5.Qt import Qt
 from pathlib import Path
 import json
 
 
+class PnvIcons:
+    MAIN_ICON: QIcon = None
+    SETTINGS_ICON: QIcon = None
+
+    TXT_REGULAR_ICON: QIcon = None
+    TXT_CONTRAST_ICON: QIcon = None
+    TXT_OVERLAP_ICON: QIcon = None
+
+    VIEW_MODE_ICON: QIcon = None
+    REVIEW_MODE_ICON: QIcon = None
+    EDIT_MODE_ICON: QIcon = None
+
+    TRANSITION_ICON: QIcon = None
+    PLACE_ICON: QIcon = None
+
+    WRAP_ICON: QIcon = None
+    UNWRAP_ICON: QIcon = None
+
+    PNML_FILE_ICON: QIcon = None
+    EPNML_FILE_ICON: QIcon = None
+
+
 class PnvMessageBoxes:
     @staticmethod
-    def proceed(text: str, inf_text: str = None, title: str = "Внимание!", icon=None) -> QMessageBox:
+    def proceed(text: str, inf_text: str = None, title: str = "Внимание!", icon=PnvIcons.MAIN_ICON) -> QMessageBox:
         wm = QMessageBox()
         wm.setIcon(QMessageBox.Information)
 
@@ -26,7 +49,7 @@ class PnvMessageBoxes:
         return wm
 
     @staticmethod
-    def warning(text: str, inf_text: str = None, title: str = "Внимание!", icon=None) -> QMessageBox:
+    def warning(text: str, inf_text: str = None, title: str = "Внимание!", icon=PnvIcons.MAIN_ICON) -> QMessageBox:
         wm = QMessageBox()
         wm.setIcon(QMessageBox.Warning)
 
@@ -40,7 +63,7 @@ class PnvMessageBoxes:
         return wm
 
     @staticmethod
-    def accept(text: str, inf_text: str = None, title: str = "Требуется подтверждение!", icon=None) -> QMessageBox:
+    def accept(text: str, inf_text: str = None, title: str = "Требуется подтверждение!", icon=PnvIcons.MAIN_ICON) -> QMessageBox:
         wm = QMessageBox()
         wm.setIcon(QMessageBox.Question)
 
@@ -58,7 +81,7 @@ class PnvMessageBoxes:
         return wm
 
     @staticmethod
-    def question(text: str, inf_text: str = None, title: str = "Внимание!", icon=None) -> QMessageBox:
+    def question(text: str, inf_text: str = None, title: str = "Внимание!", icon=PnvIcons.MAIN_ICON) -> QMessageBox:
         wm = QMessageBox()
         wm.setIcon(QMessageBox.Question)
 

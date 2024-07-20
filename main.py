@@ -5,16 +5,18 @@ import traceback
 from typing import Union, Optional
 
 import pm4py
+from PyQt5.QtGui import QPixmap
 from pm4py import PetriNet, Marking
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QMenuBar, QFileDialog, QStackedWidget, \
-    QGraphicsScene, QGraphicsView, QLabel, QTabWidget, QMessageBox, QAction, QStyle
-
+    QGraphicsScene, QGraphicsView, QLabel, QTabWidget, QMessageBox, QAction, QStyle, QVBoxLayout, QWidget, QPushButton, \
+    QHBoxLayout
+from PyQt5.Qt import Qt
 from pnv.importer import epnml
 from pnv.render import PnvViewer, PnvDrawer
-from pnv.utils import PnvMessageBoxes, PnvConfig, PnvConfigConstants
+from pnv.utils import PnvMessageBoxes, PnvConfig, PnvIcons
 
-CURRENT_VERSION = '1.21'
+CURRENT_VERSION = '1.22'
 APP_NAME = "Petri Net Visualizer"
 
 
@@ -48,8 +50,7 @@ class MethodsIO:
             if g.viewer.is_hierarchical_one() and \
                     not PnvMessageBoxes.is_accepted(PnvMessageBoxes.accept(f"Данная сеть является иерархической!",
                                            f"Выбранный формат файла не поддерживает хранение иерархических сетей, "
-                                           f"поэтому часть данных будет потеряна!",
-                                           icon=PnvMainWindow.WINDOW_ICON).exec()):
+                                           f"поэтому часть данных будет потеряна!").exec()):
                 return
             MethodsIO.save_as_pnml(g, path)
         elif path.endswith(MethodsIO.EPNML_FORMAT):
@@ -75,8 +76,6 @@ class MethodsIO:
 
 
 class PnvMainWindow(QMainWindow):
-    WINDOW_ICON = None
-
     WINDOW_MIN_WIDTH = 768
     WINDOW_MIN_HEIGHT = 512
 
@@ -92,8 +91,21 @@ class PnvMainWindow(QMainWindow):
         self.graph_view: Union[QGraphicsView, None] = None
         self.graph_scene: Union[QGraphicsScene, None] = None
         self.tabs: Union[QTabWidget, None] = None
-        # static
-        PnvMainWindow.WINDOW_ICON = QtGui.QIcon('resources/pnv_icon.ico')
+        # load icons
+        PnvIcons.MAIN_ICON = QtGui.QIcon('resources/pnv_icon.ico')
+        PnvIcons.SETTINGS_ICON = QtGui.QIcon('resources/settings.ico')
+        PnvIcons.TXT_REGULAR_ICON = QtGui.QIcon('resources/txt_regular.ico')
+        PnvIcons.TXT_CONTRAST_ICON = QtGui.QIcon('resources/txt_contrast.ico')
+        PnvIcons.TXT_OVERLAP_ICON = QtGui.QIcon('resources/txt_overlap.ico')
+        PnvIcons.TRANSITION_ICON = QtGui.QIcon('resources/transition_icon.ico')
+        PnvIcons.PLACE_ICON = QtGui.QIcon('resources/place_icon.ico')
+        PnvIcons.VIEW_MODE_ICON = QtGui.QIcon('resources/view_mode_icon.ico')
+        PnvIcons.REVIEW_MODE_ICON = QtGui.QIcon('resources/review_mode_icon.ico')
+        PnvIcons.EDIT_MODE_ICON = QtGui.QIcon('resources/edit_mode_icon.ico')
+        PnvIcons.WRAP_ICON = QtGui.QIcon('resources/wrap_icon.ico')
+        PnvIcons.UNWRAP_ICON = QtGui.QIcon('resources/unwrap_icon.ico')
+        PnvIcons.EPNML_FILE_ICON = QtGui.QIcon('resources/epnml_file_icon.ico')
+        PnvIcons.PNML_FILE_ICON = QtGui.QIcon('resources/pnml_file_icon.ico')
         # config
         try:
             PnvConfig.INSTANCE = PnvConfig(APP_NAME)
@@ -101,16 +113,14 @@ class PnvMainWindow(QMainWindow):
             PnvMessageBoxes.warning(f'Ошибка загрузки конфигурации программы!',
                                     f'Возможно конфигурационный файл повреждён. '
                                     f'Установлены значения по умолчанию. '
-                                    f'Сообщение об ошибке {ex.__class__.__name__}: {ex}',
-                                    icon=PnvMainWindow.WINDOW_ICON).exec()
+                                    f'Сообщение об ошибке {ex.__class__.__name__}: {ex}').exec()
         else:
             if not PnvConfig.INSTANCE.status:
                 PnvMessageBoxes.warning(f'Ошибка загрузки конфигурации программы!',
                                         f'Часть данных конфигурационного файла содержит неверный тип данных! '
-                                        f'Ошибочные значения установлены по умолчанию.',
-                                        icon=PnvMainWindow.WINDOW_ICON).exec()
+                                        f'Ошибочные значения установлены по умолчанию.').exec()
         # init
-        self.setWindowIcon(PnvMainWindow.WINDOW_ICON)
+        self.setWindowIcon(PnvIcons.MAIN_ICON)
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(PnvMainWindow.WINDOW_MIN_WIDTH, PnvMainWindow.WINDOW_MIN_HEIGHT)
         self.create_menu_bar()
@@ -125,14 +135,32 @@ class PnvMainWindow(QMainWindow):
     def create_stacked_wid(self):
         self.stacked_widget = QStackedWidget(self)
 
-        hello_lbl = QLabel("Petri Net Visualizer - приложение для визуализации сетей Петри. Для работы откройте файл "
-                           "представления сети Петри.")
+        welcome = QWidget(self)
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+
+        img = QLabel(self)
+        img.setPixmap(QPixmap('resources/welcome.png'))
+        img.setAlignment(Qt.AlignHCenter)
+        layout.addWidget(img)
+
+        layout.addWidget(QLabel("Приложение для интерактивной визуализации сетей Петри."))
+        layout.addWidget(QLabel("Для работы откройте файл представления сети Петри."))
+
+        layout_h = QHBoxLayout(self)
+        start_btn = QPushButton(self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon), 'Открыть файл', self)
+        start_btn.clicked.connect(self.open_file)
+        layout_h.addWidget(start_btn)
+
+        layout.addLayout(layout_h)
+        layout.addWidget(QLabel(f"Режим: {PnvConfig.INSTANCE.global_mode}"), alignment=Qt.AlignBottom)
 
         self.tabs = QTabWidget(self)
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self.close_tab)
 
-        self.stacked_widget.addWidget(hello_lbl)
+        welcome.setLayout(layout)
+        self.stacked_widget.addWidget(welcome)
         self.stacked_widget.addWidget(self.tabs)
         self.setCentralWidget(self.stacked_widget)
 
@@ -158,7 +186,7 @@ class PnvMainWindow(QMainWindow):
         self.menu_bar.addMenu(help_menu)
         help_menu.addAction(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation), "&О программе",
                             self.open_dev_info)
-        help_menu.addAction(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon), "&Файл конфигурации",
+        help_menu.addAction(PnvIcons.SETTINGS_ICON, "&Файл конфигурации",
                             self.open_config_file)
 
     @QtCore.pyqtSlot()
@@ -182,7 +210,7 @@ class PnvMainWindow(QMainWindow):
                    f"Версия: {CURRENT_VERSION}")
         # settings
         wm.setMaximumWidth(128)
-        wm.setWindowIcon(PnvMainWindow.WINDOW_ICON)
+        wm.setWindowIcon(PnvIcons.MAIN_ICON)
         wm.exec()
 
     @QtCore.pyqtSlot()
@@ -197,23 +225,20 @@ class PnvMainWindow(QMainWindow):
         if not g.viewer.can_be_saved():
             if req:
                 PnvMessageBoxes.warning("Сеть-Петри не может быть сохранена!",
-                                        f"Данная конфигурацию сети нельзя сохранить.",
-                                        icon=PnvMainWindow.WINDOW_ICON).exec()
+                                        f"Данная конфигурацию сети нельзя сохранить.").exec()
             return
         if req:
             if len(changes) != 0 and not PnvMessageBoxes.is_accepted(
                     PnvMessageBoxes.accept(f"В загруженную сеть были внесены изменения!",
                                            f"Изменения: {','.join(changes)}. "
-                                           f"Сохранить изменённую версию, перезаписав файл?",
-                                           icon=PnvMainWindow.WINDOW_ICON).exec()):
+                                           f"Сохранить изменённую версию, перезаписав файл?").exec()):
                 return
         MethodsIO.export_net(g, path)
 
     def on_close_tab(self, idx: int, request) -> bool:
         if request and not PnvMessageBoxes.is_accepted(
                 PnvMessageBoxes.question(f"Вы собираетесь закрыть вкладку {self.tabs.tabText(idx)}.",
-                                         f"Вы уверены?",
-                                         icon=PnvMainWindow.WINDOW_ICON).exec()):
+                                         f"Вы уверены?").exec()):
             return False
         g = self.find_graph(idx)
         self.save_graph(g, g.path)
@@ -259,19 +284,16 @@ class PnvMainWindow(QMainWindow):
             pn, im, fm = MethodsIO.import_net(path)
             # check
             if all(len(t) == 0 for t in [pn.places, pn.transitions]):
-                PnvMessageBoxes.warning("Загружена пустая сеть!",
-                                        icon=PnvMainWindow.WINDOW_ICON).exec()
+                PnvMessageBoxes.warning("Загружена пустая сеть!").exec()
                 return
             if len(pn.arcs) == 0:
-                PnvMessageBoxes.warning("Невозможно отобразить бессвязную сеть!",
-                                        icon=PnvMainWindow.WINDOW_ICON).exec()
+                PnvMessageBoxes.warning("Невозможно отобразить бессвязную сеть!").exec()
                 return
             # some graph render data:
             # https://www.graphviz.org/documentation/TSE93.pdf
         except Exception as ex:
             PnvMessageBoxes.warning("Возникла ошибка при открытии файла!",
-                                    inf_text=f"{ex.__class__.__name__}: {ex}",
-                                    icon=PnvMainWindow.WINDOW_ICON).exec()
+                                    inf_text=f"{ex.__class__.__name__}: {ex}").exec()
             traceback.print_exc()
         if pn:
             name = os.path.basename(path)
@@ -291,11 +313,11 @@ class PnvMainWindow(QMainWindow):
                 PnvMessageBoxes.warning("Невозможно отобразить Сеть-Петри!",
                                         f"Извините, но данная версия PetriNetViewer {CURRENT_VERSION}. "
                                         f"не может отобразить загруженный граф! "
-                                        f"Сообщение компонента-отрисовки {ex.__class__.__name__}: {ex}",
-                                        icon=PnvMainWindow.WINDOW_ICON).exec()
+                                        f"Сообщение компонента-отрисовки {ex.__class__.__name__}: {ex}").exec()
                 traceback.print_exc()
                 return
-            idx = self.tabs.addTab(viewer, name)
+            icon = PnvIcons.EPNML_FILE_ICON if name.endswith('epnml') else (PnvIcons.PNML_FILE_ICON if name.endswith('pnml') else None)
+            idx = self.tabs.addTab(viewer, icon, name)
             gr_data = GraphData(path, (pn, im, fm), viewer, idx)
             self.graphs.append(gr_data)
 
@@ -322,8 +344,7 @@ class PnvMainWindow(QMainWindow):
         if len(path) != 0:
             if pathlib.Path(path).exists() and not PnvMessageBoxes.is_accepted(
                     PnvMessageBoxes.accept(f"Выбранный файл уже существует!",
-                                           f"Файл будет перезаписан. Продолжить?",
-                                           icon=PnvMainWindow.WINDOW_ICON).exec()):
+                                           f"Файл будет перезаписан. Продолжить?").exec()):
                 return
             idx = self.tabs.currentIndex()
             g = self.find_graph(idx)
@@ -340,8 +361,7 @@ class PnvMainWindow(QMainWindow):
             return
         if pathlib.Path(path).exists() and not PnvMessageBoxes.is_accepted(
                 PnvMessageBoxes.accept(f"Выбранный файл уже существует!",
-                                       f"Файл будет перезаписан. Продолжить?",
-                                       icon=PnvMainWindow.WINDOW_ICON).exec()):
+                                       f"Файл будет перезаписан. Продолжить?").exec()):
             return
         # create empty
         pn, im, fm = PetriNet(), None, None
@@ -385,8 +405,7 @@ class PnvMainWindow(QMainWindow):
             PnvMessageBoxes.warning("Невозможно отобразить Сеть-Петри!",
                                     f"Извините, но данная версия PetriNetViewer {CURRENT_VERSION}. "
                                     f"не может отобразить загруженный граф! "
-                                    f"Сообщение компонента-отрисовки {ex.__class__.__name__}: {ex}",
-                                    icon=PnvMainWindow.WINDOW_ICON).exec()
+                                    f"Сообщение компонента-отрисовки {ex.__class__.__name__}: {ex}").exec()
             traceback.print_exc()
             return
 
