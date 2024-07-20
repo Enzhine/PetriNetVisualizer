@@ -7,7 +7,7 @@ Continued development by jul 20.
 Program written using python 3.11.
 Should be able to view any *.pnml or *.epnml file.
 # Program screenshots
-![image](github_data/preview.png)
+![image](github_data/preview4.png)
 ![image](github_data/preview0.png)
 ![image](github_data/preview1.png)
 ![image](github_data/preview2.png)|
