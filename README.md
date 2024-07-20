@@ -1,10 +1,10 @@
-# Petri Net Visualizer v1.21
+# Petri Net Visualizer v1.22
 HSE SE 2nd Course Project.
 Shamaev Onar Evgenevich
 
-Continued development by jul 18.
+Continued development by jul 20.
 # About program
-Program written using python 3.11.
+Program written using python 3.10.
 Should be able to view any *.pnml or *.epnml file.
 # Program screenshots
 ![image](github_data/preview.png)
