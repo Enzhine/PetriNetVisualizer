@@ -62,11 +62,16 @@ class PnvDrawer:
         if self.is_review_mode():
             self.__cached_htree = self.__make_htree()
 
-    def hn_root(self):
-        return self.__cached_htree
+        self.__net_cover = None
+
+    def is_hierarchical_net(self):
+        return any(isinstance(t, ExtendedTransition) for t in self.net.transitions)
 
     def is_review_mode(self):
         return PnvConfig.INSTANCE.global_mode == PnvConfigConstants.GLOBAL_MODE_REVIEW
+
+    def hn_root(self):
+        return self.__cached_htree
 
     def __make_htree(self, root: tuple[HierNode, ExtendedTransition] = None):
         if root:
@@ -158,6 +163,7 @@ class PnvDrawer:
             self.mapper[a.target].arrows().add(obj)
         if self.is_review_mode():
             self.__cached_htree.value = (None, self.net, lst)
+        self.__net_cover = self.__make_net_cover()
 
     def igraph_gen_layout(self, pn: PetriNet):
         n_vertices = len(pn.places) + len(pn.transitions)
@@ -319,7 +325,45 @@ class PnvDrawer:
             maxy = max(maxy, y)
         return minx, miny, maxx, maxy
 
-    def hv_cover_sync(self, root=None):
+    def net_cover_sync(self):
+        lst = [item for item in self.scene.items() if isinstance(item, (PnvQGTransitionItem, PnvQGPlaceItem))]
+
+        minx, miny, maxx, maxy = PnvDrawer.bounds(lst)
+        padding = PnvDrawer.GRAPHICS_WIDTH * 2
+        txt, *_ = self.__net_cover.childItems()
+        padding_top = QtGui.QFontMetrics(txt.font()).height() + padding
+        self.__net_cover.setRect(Qt.QRectF(minx - padding, miny - padding_top, maxx - minx + 2 * padding, maxy - miny + 3 * padding))
+        txt.setPos(minx - padding, miny - padding_top)
+
+    def net_cover_visible(self, val: bool):
+        if self.__net_cover:
+            if val:
+                self.net_cover_sync()
+            self.__net_cover.show() if val else self.__net_cover.hide()
+
+    def __make_net_cover(self):
+        lst = [item for item in self.scene.items() if isinstance(item, (PnvQGTransitionItem, PnvQGPlaceItem))]
+        minx, miny, maxx, maxy = PnvDrawer.bounds(lst)
+        padding = PnvDrawer.GRAPHICS_WIDTH
+        new_col = Qt.QColor(0xadadad)
+
+        _net_txt = self.scene.addText(self.net.name,
+                                     QtGui.QFont(PnvConfig.INSTANCE.text_font_family,
+                                                 PnvConfig.INSTANCE.text_font_size,
+                                                 PnvConfig.INSTANCE.text_font_weight))
+        padding_top = QtGui.QFontMetrics(_net_txt.font()).height() + padding
+        _net_cover = self.scene.addRect(
+            Qt.QRectF(minx - padding, miny - padding_top, maxx - minx + 2 * padding, maxy - miny + 3 * padding),
+            Qt.QPen(new_col, 2, Qt.Qt.DashLine))
+        _net_txt.setPos(minx - padding, miny - padding_top)
+        _net_txt.setDefaultTextColor(new_col)
+        _net_txt.setParentItem(_net_cover)
+        _net_txt.setZValue(2)
+        _net_cover.setZValue(-5)
+
+        return _net_cover
+
+    def hv_cover_sync(self, root: HierNode = None):
         if root is None:
             root = self.__cached_htree
         for n in root.children():
@@ -1286,7 +1330,7 @@ class PnvViewer(QGraphicsView):
         self.__context_blocked = False
 
         self.__hier_tree = None
-        if self.drawer.is_review_mode():
+        if self.drawer.is_review_mode() and self.drawer.is_hierarchical_net():
             self.__hier_tree = GraphHierTree(self, self.drawer.hn_root())
 
     def wheelEvent(self, e: Optional[QtGui.QWheelEvent]) -> None:
@@ -1319,7 +1363,7 @@ class PnvViewer(QGraphicsView):
     def resizeEvent(self, event: Optional[QtGui.QResizeEvent]) -> None:
         self.edit_mode_btn.update_pos()
         self.labeling_btn.update_pos()
-        if self.drawer.is_review_mode():
+        if self.drawer.is_review_mode() and self.drawer.is_hierarchical_net():
             self.__hier_tree.update_pos()
         super().resizeEvent(event)
 
@@ -1374,6 +1418,7 @@ class PnvViewer(QGraphicsView):
 
     def drawer_push_modes(self):
         self.drawer.edit_mode = self.edit_mode_btn.mode()
+        self.drawer.net_cover_visible(self.drawer.edit_mode == PnvConfigConstants.ENTER_MODE_VIEW)
         self.drawer.label_mode = self.labeling_btn.labeling_mode()
         if self.drawer.is_review_mode():
             self.drawer.hv_cover_sync()
@@ -1502,6 +1547,6 @@ class PnvViewer(QGraphicsView):
             elif (final is not None) and (bound in final):
                 obj.final = final[bound]
 
-    def is_hierarchical_one(self):
+    def is_drawn_hierarchical(self):
         return any(isinstance(obj.petri_net_bound(), ExtendedTransition) for obj in self.items() if
                    isinstance(obj, PnvQGTransitionItem))

@@ -14,9 +14,9 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QMenuBar, QFileDia
 from PyQt5.Qt import Qt
 from pnv.importer import epnml
 from pnv.render import PnvViewer, PnvDrawer
-from pnv.utils import PnvMessageBoxes, PnvConfig, PnvIcons
+from pnv.utils import PnvMessageBoxes, PnvConfig, PnvIcons, PnvConfigConstants
 
-CURRENT_VERSION = '1.22'
+CURRENT_VERSION = '1.23'
 APP_NAME = "Petri Net Visualizer"
 
 
@@ -47,7 +47,7 @@ class MethodsIO:
     @staticmethod
     def export_net(g: GraphData, path: str):
         if path.endswith(MethodsIO.PNML_FORMAT):
-            if g.viewer.is_hierarchical_one() and \
+            if g.viewer.is_drawn_hierarchical() and \
                     not PnvMessageBoxes.is_accepted(PnvMessageBoxes.accept(f"Данная сеть является иерархической!",
                                            f"Выбранный формат файла не поддерживает хранение иерархических сетей, "
                                            f"поэтому часть данных будет потеряна!").exec()):
@@ -124,6 +124,7 @@ class PnvMainWindow(QMainWindow):
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(PnvMainWindow.WINDOW_MIN_WIDTH, PnvMainWindow.WINDOW_MIN_HEIGHT)
         self.create_menu_bar()
+        self.__global_mode_display = QLabel(f"Режим: {PnvConfig.INSTANCE.global_mode}")
         self.create_stacked_wid()
 
         self.graphs: list[GraphData] = []
@@ -150,10 +151,13 @@ class PnvMainWindow(QMainWindow):
         layout_h = QHBoxLayout(self)
         start_btn = QPushButton(self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon), 'Открыть файл', self)
         start_btn.clicked.connect(self.open_file)
+        chmod_btn = QPushButton(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload), 'Изменить режим', self)
+        chmod_btn.clicked.connect(self.chmod)
         layout_h.addWidget(start_btn)
+        layout_h.addWidget(chmod_btn)
 
         layout.addLayout(layout_h)
-        layout.addWidget(QLabel(f"Режим: {PnvConfig.INSTANCE.global_mode}"), alignment=Qt.AlignBottom)
+        layout.addWidget(self.__global_mode_display, alignment=Qt.AlignRight)
 
         self.tabs = QTabWidget(self)
         self.tabs.setTabsClosable(True)
@@ -188,6 +192,14 @@ class PnvMainWindow(QMainWindow):
                             self.open_dev_info)
         help_menu.addAction(PnvIcons.SETTINGS_ICON, "&Файл конфигурации",
                             self.open_config_file)
+
+    @QtCore.pyqtSlot()
+    def chmod(self):
+        if PnvConfig.INSTANCE.global_mode == PnvConfigConstants.GLOBAL_MODE_REVIEW:
+            PnvConfig.INSTANCE.global_mode = PnvConfigConstants.GLOBAL_MODE_MUTATE
+        elif PnvConfig.INSTANCE.global_mode == PnvConfigConstants.GLOBAL_MODE_MUTATE:
+            PnvConfig.INSTANCE.global_mode = PnvConfigConstants.GLOBAL_MODE_REVIEW
+        self.__global_mode_display.setText(f"Режим: {PnvConfig.INSTANCE.global_mode}")
 
     @QtCore.pyqtSlot()
     def file_menu_update(self):
@@ -342,10 +354,10 @@ class PnvMainWindow(QMainWindow):
     def save_file_as(self):
         path = self.get_new_file_path()
         if len(path) != 0:
-            if pathlib.Path(path).exists() and not PnvMessageBoxes.is_accepted(
-                    PnvMessageBoxes.accept(f"Выбранный файл уже существует!",
-                                           f"Файл будет перезаписан. Продолжить?").exec()):
-                return
+            # if pathlib.Path(path).exists() and not PnvMessageBoxes.is_accepted(
+            #         PnvMessageBoxes.accept(f"Выбранный файл уже существует!",
+            #                                f"Файл будет перезаписан. Продолжить?").exec()):
+            #     return
             idx = self.tabs.currentIndex()
             g = self.find_graph(idx)
             self.save_graph(g, path, req=False)
@@ -359,10 +371,10 @@ class PnvMainWindow(QMainWindow):
         path = self.get_new_file_path()
         if len(path) == 0:
             return
-        if pathlib.Path(path).exists() and not PnvMessageBoxes.is_accepted(
-                PnvMessageBoxes.accept(f"Выбранный файл уже существует!",
-                                       f"Файл будет перезаписан. Продолжить?").exec()):
-            return
+        # if pathlib.Path(path).exists() and not PnvMessageBoxes.is_accepted(
+        #         PnvMessageBoxes.accept(f"Выбранный файл уже существует!",
+        #                                f"Файл будет перезаписан. Продолжить?").exec()):
+        #     return
         # create empty
         pn, im, fm = PetriNet(), None, None
 
