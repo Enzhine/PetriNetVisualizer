@@ -627,7 +627,7 @@ class PnvQGArrowItem(QGraphicsLineItem):
               widget: Optional[QWidget] = ...) -> None:
         ln = self.line()
         vec = np.array([ln.x1() - ln.x2(), ln.y1() - ln.y2()])
-        vec = vec / np.linalg.norm(vec) * 10
+        vec = vec / np.linalg.norm(vec) * 10 # MIGHT RETURN ZERO ERROR
         rot1 = self.rotated(vec, 30)
         rot2 = self.rotated(vec, -30)
         painter.setPen(self.pen())

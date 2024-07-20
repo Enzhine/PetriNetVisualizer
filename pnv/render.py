@@ -278,9 +278,9 @@ class PnvDrawer:
         self.net.places.remove(bound)
         # gui remove
         for arrow in item.arrows():
-            if arrow.from_ is self:
+            if arrow.from_ is item:
                 arrow.to.arrows().remove(arrow)
-            elif arrow.to is self:
+            elif arrow.to is item:
                 arrow.from_.arrows().remove(arrow)
             arrow.hide()
             self.scene.removeItem(arrow)
@@ -302,9 +302,9 @@ class PnvDrawer:
         self.net.transitions.remove(bound)
         # gui remove
         for arrow in item.arrows():
-            if arrow.from_ is self:
+            if arrow.from_ is item:
                 arrow.to.arrows().remove(arrow)
-            elif arrow.to is self:
+            elif arrow.to is item:
                 arrow.from_.arrows().remove(arrow)
             arrow.hide()
             self.scene.removeItem(arrow)
@@ -329,7 +329,20 @@ class PnvDrawer:
         lst = [item for item in self.scene.items() if isinstance(item, (PnvQGTransitionItem, PnvQGPlaceItem))]
 
         minx, miny, maxx, maxy = PnvDrawer.bounds(lst)
-        padding = PnvDrawer.GRAPHICS_WIDTH * 2
+        if self.is_review_mode():
+            for c in self.__cached_htree.children():
+                c: HierNode
+                if len(c.value) < 4 or c.value[3] is None:
+                    continue
+                _, _, _, c_cover = c.value
+                c_cover: QGraphicsRectItem
+                minx = min(minx, c_cover.rect().x())
+                miny = min(miny, c_cover.rect().y())
+                c_maxx = c_cover.rect().x() + c_cover.rect().width()
+                c_maxy = c_cover.rect().y() + c_cover.rect().height()
+                maxx = max(maxx, c_maxx)
+                maxy = max(maxy, c_maxy)
+        padding = PnvDrawer.GRAPHICS_WIDTH
         txt, *_ = self.__net_cover.childItems()
         padding_top = QtGui.QFontMetrics(txt.font()).height() + padding
         self.__net_cover.setRect(Qt.QRectF(minx - padding, miny - padding_top, maxx - minx + 2 * padding, maxy - miny + 3 * padding))

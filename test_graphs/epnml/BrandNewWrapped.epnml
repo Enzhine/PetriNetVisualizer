@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <pnml>
-  <net id="imported_1721484850.2406838" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
+  <net id="imported_1721509761.0819616" type="http://www.pnml.org/version-2009/grammar/pnmlcoremodel">
     <name>
-      <text>imported_1721484850.2406838</text>
+      <text>imported_1721509761.0819616</text>
     </name>
     <page id="n0">
       <place id="p1">
@@ -17,24 +17,6 @@
           <dimension x="40.0" y="40.0"/>
         </graphics>
       </place>
-      <place id="p4">
-        <name>
-          <text>p4</text>
-        </name>
-        <graphics>
-          <position x="0.0" y="-100.0"/>
-          <dimension x="40.0" y="40.0"/>
-        </graphics>
-      </place>
-      <place id="p2">
-        <name>
-          <text>p2</text>
-        </name>
-        <graphics>
-          <position x="-200.0" y="-100.0"/>
-          <dimension x="40.0" y="40.0"/>
-        </graphics>
-      </place>
       <place id="p1707509694.379825">
         <name>
           <text>p1707509694.379825</text>
@@ -44,85 +26,105 @@
           <dimension x="40.0" y="40.0"/>
         </graphics>
       </place>
-      <transition id="p1707509691.180038">
+      <transition id="g_1721510131.9337485">
         <name>
-          <text>p1707509691.180038</text>
+          <text>super task</text>
         </name>
         <graphics>
-          <position x="-300.0" y="-100.0"/>
-          <dimension x="40.0" y="40.0"/>
-        </graphics>
-      </transition>
-      <transition id="g_1707511722.2796094">
-        <name>
-          <text>wrapped</text>
-        </name>
-        <graphics>
-          <position x="-100.0" y="-150.0"/>
-          <dimension x="40.0" y="40.0"/>
+          <position x="-100.0" y="-100.0"/>
+          <dimension x="40" y="40"/>
         </graphics>
         <page id="n0">
-          <place id="p1707511635.5929847">
+          <place id="p4">
             <name>
-              <text>p1707511635.5929847</text>
+              <text>p4</text>
             </name>
             <graphics>
-              <position x="-100.0" y="-200.0"/>
+              <position x="0.0" y="-100.0"/>
               <dimension x="40.0" y="40.0"/>
             </graphics>
           </place>
-          <transition id="p1707509670.758634">
+          <place id="p2">
             <name>
-              <text>p1707509670.758634</text>
+              <text>p2</text>
             </name>
             <graphics>
-              <position x="-100.0" y="-300.0"/>
+              <position x="-200.0" y="-100.0"/>
+              <dimension x="40.0" y="40.0"/>
+            </graphics>
+          </place>
+          <transition id="t3">
+            <name>
+              <text>start</text>
+            </name>
+            <graphics>
+              <position x="100.0" y="-100.0"/>
               <dimension x="40.0" y="40.0"/>
             </graphics>
           </transition>
-          <transition id="p1707509672.3047385">
+          <transition id="p1707509691.180038">
             <name>
-              <text>p1707509672.3047385</text>
+              <text>end</text>
             </name>
             <graphics>
-              <position x="-100.0" y="0.0"/>
+              <position x="-300.0" y="-100.0"/>
               <dimension x="40.0" y="40.0"/>
             </graphics>
           </transition>
-          <transition id="t4">
+          <transition id="g_1721510118.9229102">
             <name>
-              <text>t4</text>
+              <text>multi task</text>
             </name>
             <graphics>
               <position x="-100.0" y="-100.0"/>
-              <dimension x="40.0" y="40.0"/>
+              <dimension x="40" y="40"/>
             </graphics>
+            <page id="n0">
+              <transition id="p1707509672.3047385">
+                <name>
+                  <text>t3</text>
+                </name>
+                <graphics>
+                  <position x="-100.0" y="0.0"/>
+                  <dimension x="40.0" y="40.0"/>
+                </graphics>
+              </transition>
+              <transition id="t4">
+                <name>
+                  <text>t2</text>
+                </name>
+                <graphics>
+                  <position x="-100.0" y="-100.0"/>
+                  <dimension x="40.0" y="40.0"/>
+                </graphics>
+              </transition>
+              <transition id="p1707509670.758634">
+                <name>
+                  <text>t1</text>
+                </name>
+                <graphics>
+                  <position x="-100.0" y="-200.0"/>
+                  <dimension x="40.0" y="40.0"/>
+                </graphics>
+              </transition>
+              <arc id="1411925969696" source="p4" target="p1707509672.3047385"/>
+              <arc id="1411925969984" source="t4" target="p2"/>
+              <arc id="1411925969888" source="p4" target="t4"/>
+              <arc id="1411925969792" source="p4" target="p1707509670.758634"/>
+              <arc id="1411925970080" source="p1707509672.3047385" target="p2"/>
+              <arc id="1411925970176" source="p1707509670.758634" target="p2"/>
+            </page>
           </transition>
-          <arc id="2971102259968" source="p4" target="p1707509670.758634"/>
-          <arc id="2971102260256" source="p1707511635.5929847" target="t4"/>
-          <arc id="2971102260064" source="p1707509670.758634" target="p2"/>
-          <arc id="2971102260352" source="p4" target="p1707509672.3047385"/>
-          <arc id="2971102260160" source="p1707509670.758634" target="p1707511635.5929847"/>
-          <arc id="2971102260448" source="p1707509672.3047385" target="p2"/>
-          <arc id="2971102260544" source="p4" target="t4"/>
-          <arc id="2971102260640" source="t4" target="p2"/>
+          <arc id="1411925970464" source="p1" target="t3"/>
+          <arc id="1411925970752" source="t3" target="p4"/>
+          <arc id="1411925970656" source="p2" target="p1707509691.180038"/>
+          <arc id="1411925970560" source="p1707509691.180038" target="p1707509694.379825"/>
+          <arc id="1411925977136" source="p4" target="g_1721510118.9229102"/>
+          <arc id="1411925977040" source="g_1721510118.9229102" target="p2"/>
         </page>
       </transition>
-      <transition id="t3">
-        <name>
-          <text>t3</text>
-        </name>
-        <graphics>
-          <position x="100.0" y="-100.0"/>
-          <dimension x="40.0" y="40.0"/>
-        </graphics>
-      </transition>
-      <arc id="2971102260736" source="p2" target="p1707509691.180038"/>
-      <arc id="2971102261024" source="t3" target="p4"/>
-      <arc id="2971102260832" source="g_1707511722.2796094" target="p2"/>
-      <arc id="2971102261120" source="p1707509691.180038" target="p1707509694.379825"/>
-      <arc id="2971102260928" source="p4" target="g_1707511722.2796094"/>
-      <arc id="2971102261216" source="p1" target="t3"/>
+      <arc id="1411925977760" source="p1" target="g_1721510131.9337485"/>
+      <arc id="1411925977664" source="g_1721510131.9337485" target="p1707509694.379825"/>
     </page>
     <finalmarkings>
       <marking>
