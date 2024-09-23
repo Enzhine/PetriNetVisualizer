@@ -2,3 +2,4 @@ venv
 .git
 .idea
 /resources_origin/
+/unwrapped/

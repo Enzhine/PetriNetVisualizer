@@ -45,30 +45,30 @@ class MethodsIO:
         return pn, im, fm
 
     @staticmethod
-    def export_net(g: GraphData, path: str):
+    def export_net(g: GraphData, path: str, force: bool):
         if path.endswith(MethodsIO.PNML_FORMAT):
             if g.viewer.is_drawn_hierarchical() and \
                     not PnvMessageBoxes.is_accepted(PnvMessageBoxes.accept(f"Данная сеть является иерархической!",
                                            f"Выбранный формат файла не поддерживает хранение иерархических сетей, "
                                            f"поэтому часть данных будет потеряна!").exec()):
                 return
-            MethodsIO.save_as_pnml(g, path)
+            MethodsIO.save_as_pnml(g, path, force)
         elif path.endswith(MethodsIO.EPNML_FORMAT):
-            MethodsIO.save_as_epnml(g, path)
+            MethodsIO.save_as_epnml(g, path, force)
         else:
             raise ValueError(f'Unknown file format {path}!')
 
     @staticmethod
-    def save_as_pnml(g: GraphData, file_path: str):
-        if g.viewer.drawer.status.is_changed():
+    def save_as_pnml(g: GraphData, file_path: str, force: bool):
+        if g.viewer.drawer.status.is_changed() or force:
             g.viewer.inject_all_positions()
             init, fin = g.viewer.retrieve_markings()
             g.viewer.drawer.status.reset()
             pm4py.write_pnml(g.petri_net, init, fin, file_path)
 
     @staticmethod
-    def save_as_epnml(g: GraphData, file_path: str):
-        if g.viewer.drawer.status.is_changed():
+    def save_as_epnml(g: GraphData, file_path: str, force: bool):
+        if g.viewer.drawer.status.is_changed() or force:
             g.viewer.inject_all_positions()
             init, fin = g.viewer.retrieve_markings()
             g.viewer.drawer.status.reset()
@@ -232,20 +232,20 @@ class PnvMainWindow(QMainWindow):
     def close_tab(self, idx: int):
         self.on_close_tab(idx, True)
 
-    def save_graph(self, g: GraphData, path: str, req: bool = True):
+    def save_graph(self, g: GraphData, path: str, notify: bool = True, force: bool = False):
         changes = g.viewer.drawer.status.changes()
         if not g.viewer.can_be_saved():
-            if req:
+            if notify:
                 PnvMessageBoxes.warning("Сеть-Петри не может быть сохранена!",
                                         f"Данная конфигурацию сети нельзя сохранить.").exec()
             return
-        if req:
+        if notify:
             if len(changes) != 0 and not PnvMessageBoxes.is_accepted(
                     PnvMessageBoxes.accept(f"В загруженную сеть были внесены изменения!",
                                            f"Изменения: {','.join(changes)}. "
                                            f"Сохранить изменённую версию, перезаписав файл?").exec()):
                 return
-        MethodsIO.export_net(g, path)
+        MethodsIO.export_net(g, path, force)
 
     def on_close_tab(self, idx: int, request) -> bool:
         if request and not PnvMessageBoxes.is_accepted(
@@ -360,7 +360,7 @@ class PnvMainWindow(QMainWindow):
             #     return
             idx = self.tabs.currentIndex()
             g = self.find_graph(idx)
-            self.save_graph(g, path, req=False)
+            self.save_graph(g, path, notify=False, force=True)
             g.path = path
             g.viewer.edited_status = False
             g.viewer.drawer.edited_status = False
